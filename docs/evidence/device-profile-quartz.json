@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "deviceProfileId": "hp-googlebook-14-quartz-cl3b-260622-276-r2",
+  "observedAt": "2026-10-16T06:05:00Z",
+  "observationMethod": "read-only adb shell getprop/dumpsys/pm/ps; no installs or interactive mutations",
+  "ownership": {
+    "status": "owned-by-other-project",
+    "since": "2026-10-16",
+    "constraint": "Hands-off for interactive/mutating adb actions until user releases the device; build and validate on emulator first.",
+    "incident": "One pre-constraint adb input attempt (echo probe) did not reach the Terminal; the foreground was an unrelated app and the device shell rejected the command substitution. No Terminal mutation confirmed. All device interaction stopped immediately after the ownership interjection."
+  },
+  "host": {
+    "model": "HP Googlebook 14",
+    "device": "quartz",
+    "brand": "HP",
+    "sdkInt": 37,
+    "androidRelease": "17",
+    "buildFingerprint": "HP/quartz/quartz:17/CL3B.260622.276.R2/16560795:user/release-keys",
+    "securityPatch": "2026-09-01",
+    "abi": "arm64-v8a",
+    "pageSize": 4096,
+    "webView": {"package": "com.google.android.webview", "version": "149.0.7827.5", "targetSdk": 36},
+    "memoryMb": 15480,
+    "dataFreeBytes": 384248168448,
+    "developmentSettingsEnabled": true,
+    "adbEnabled": true
+  },
+  "terminalVm": {
+    "package": "com.android.virtualization.terminal",
+    "versionName": "17",
+    "targetSdk": 37,
+    "minSdk": 37,
+    "launcherActivity": "com.android.virtualization.terminal/.new2.ui.MainActivity",
+    "terminalProcessRunning": true,
+    "vmProcess": "crosvm_ToscanaMicrodroid",
+    "virtualizationServiceRunning": true,
+    "guestShellPromptObserved": "droid@debian: ~"
+  },
+  "otherPackages": {
+    "antigravity": "com.google.android.apps.antigravity (installed)"
+  },
+  "capabilities": {
+    "apkNativeToVm": {"state": "unknown", "evidence": [], "note": "physical probe blocked by device ownership"},
+    "webViewToVm": {"state": "unknown", "evidence": [], "note": "physical probe blocked by device ownership"},
+    "extensionWebviews": {"state": "unknown", "evidence": []},
+    "sharedSourceSemantics": {"state": "unknown", "evidence": [], "note": "requires physical Terminal shared-folder settings"},
+    "serialApi37": {"state": "unknown", "evidence": [], "note": "API 37 host present; service/port exposure untested"},
+    "usbHostSerial": {"state": "unknown", "evidence": []},
+    "usbHostRaw": {"state": "unknown", "evidence": []},
+    "guestVhci": {"state": "unknown", "evidence": [], "note": "guest kernel config unread; physical probe blocked"},
+    "guestDebianShell": {"state": "pass", "evidence": ["terminal UI shows droid@debian:~ prompt; crosvm_ToscanaMicrodroid process running"], "note": "read-only observation only"},
+    "vmIndependentLifetime": {"state": "unknown", "evidence": []}
+  },
+  "buildHost": {
+    "os": "linux x86_64",
+    "java": "21.0.9",
+    "node": "v22.22.1",
+    "cargo": null,
+    "androidSdk": "~/Android/Sdk",
+    "platforms": ["android-34", "android-35", "android-36"],
+    "buildTools": ["35.0.0", "36.1.0"],
+    "gradleDistsCached": ["9.6.0", "9.6.1", "9.7.1", "9.8.1"],
+    "emulator": {"avds": ["Medium_Phone_API_36.1"], "googlebookImage": false},
+    "notes": "No Googlebook desktop emulator image present; phone AVD valid for generic tests only. cargo absent (install before guest Rust work)."
+  }
+}

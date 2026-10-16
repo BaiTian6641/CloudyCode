@@ -6,7 +6,8 @@ Read [README.md](README.md), the [stage-plan index](docs/plan/README.md), and th
 
 - Run generic tests on Google's Android emulator/AVD first: unit tests, Android instrumentation, WebView UI behavior, input/IME fixtures, and anything that does not depend on Googlebook-specific platform features.
 - The available local AVD (`Medium_Phone_API_36.1`, SDK at `~/Android/Sdk`) is a phone image. It is valid for generic Android behavior only.
-- The emulator **cannot** prove Googlebook Terminal VM, localhost forwarding, shared-folder mounts, USB permission behavior, guest VHCI, or lid/keyboard/trackpad specifics. Those require the ADB-attached physical Googlebook (currently: HP Googlebook 14, Android 17/SDK 37, arm64-v8a).
+- **Device ownership constraint (2026-10-16):** the ADB-attached HP Googlebook 14 is currently owned by another project. Do NOT run interactive or mutating ADB actions on it (no `input`, app installs, launches, permission changes, Terminal typing). Read-only inventory already collected stands. Physical-device probes stay blocked until the user explicitly releases the device.
+- The emulator **cannot** prove Googlebook Terminal VM, localhost forwarding, shared-folder mounts, USB permission behavior, guest VHCI, or lid/keyboard/trackpad specifics. Those require the physical Googlebook after release.
 - Label every result `emulator` or `physical` with image/build identity. Never promote an emulator pass to a platform capability claim.
 - Do not add emulator-only workarounds to release code paths; probe fixtures belong under `android/probes/` or `tests/`.
 
