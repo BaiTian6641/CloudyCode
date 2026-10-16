@@ -1,0 +1,8 @@
+{
+  "trigger": {
+    "action": "report"
+  },
+  "ts": "2026-10-16T08:06:25.370Z",
+  "ok": true,
+  "detail": "report command executed"
+}

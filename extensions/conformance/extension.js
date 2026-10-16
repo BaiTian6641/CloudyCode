@@ -1,7 +1,11 @@
 // GBCode S01.04 conformance extension (plain CommonJS, no build step).
 // Proves: workspace extension-host execution, child_process in the remote host,
 // webview with strict CSP + local resource, tree view, output channel, and
-// machine-readable report for the selected backend.
+// Version 0.2.0 adds a server-side trigger bridge: JSON files dropped into
+// /tmp/gbcode-slice-triggers/ are executed as workbench actions (terminal
+// creation, marker commands, reports). This mirrors the production companion
+// extension pattern: guest-side logic drives real workbench APIs while the
+// APK renders the result. Trigger dir is host-local, not a network surface.
 "use strict";
 
 const vscode = require("vscode");
@@ -106,6 +110,157 @@ function activate(context) {
     }
   })();
   vscode.window.registerTreeDataProvider("gbcodeConformance.status", treeProvider);
+
+  // --- Server-side trigger bridge (vertical-slice automation) ---
+  const triggerDir = path.join(os.tmpdir(), "gbcode-slice-triggers");
+  const resultDir = path.join(os.tmpdir(), "gbcode-slice-results");
+  fs.mkdirSync(triggerDir, { recursive: true });
+  fs.mkdirSync(resultDir, { recursive: true });
+  output.appendLine("watching triggers in " + triggerDir);
+
+  async function handleTrigger(file) {
+    let trigger;
+    try {
+      trigger = JSON.parse(fs.readFileSync(path.join(triggerDir, file), "utf8"));
+    } catch (e) {
+      output.appendLine("bad trigger " + file + ": " + e.message);
+      return;
+    }
+    const result = { trigger, ts: new Date().toISOString(), ok: false, detail: null };
+    try {
+      if (trigger.action === "terminal-cmd") {
+        // Use the workbench command (same path as user palette) instead of the
+        // raw createTerminal API, whose lazy pty spawn stalls in web servers.
+        const target = trigger.target || path.join(os.tmpdir(), "gbcode-cmd.txt");
+        const marker = trigger.marker || "GBCODE_CMD";
+        await vscode.commands.executeCommand("workbench.action.terminal.new");
+        const term = vscode.window.activeTerminal;
+        if (!term) throw new Error("no activeTerminal after terminal.new");
+        let transcript = "";
+        const dataSub = vscode.window.onDidWriteTerminalData
+            ? vscode.window.onDidWriteTerminalData((e) => {
+                if (e.terminal === term) transcript += e.data;
+              })
+            : { dispose() {} };
+        let pid = "pending";
+        term.processId.then((p) => { pid = String(p); }, () => { pid = "reject"; });
+        setTimeout(() => term.sendText(`echo ${marker} > ${target}`, true), 4000);
+        const deadline = Date.now() + 15000;
+        let written = null;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 500));
+          if (fs.existsSync(target)) {
+            written = fs.readFileSync(target, "utf8").trim();
+            if (written === marker) break;
+          }
+        }
+        dataSub.dispose();
+        result.detail = {
+          pid,
+          written,
+          transcript: transcript.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").slice(-400),
+        };
+        result.ok = written === marker;
+      } else if (trigger.action === "terminal-debug") {
+        const term = vscode.window.createTerminal({ name: "GBCode Debug" });
+        term.show(false);
+        let pidResolved = "pending";
+        term.processId.then(
+          (p) => { pidResolved = String(p); },
+          (e) => { pidResolved = "reject:" + e.message; }
+        );
+        let transcript = "";
+        const dataSub = vscode.window.onDidWriteTerminalData
+            ? vscode.window.onDidWriteTerminalData((e) => {
+                if (e.terminal === term) transcript += e.data;
+              })
+            : { dispose() {} };
+        const target = trigger.target || path.join(os.tmpdir(), "gbcode-dbg.txt");
+        const marker = trigger.marker || "GBCODE_DBG";
+        setTimeout(() => term.sendText(`echo ${marker} > ${target}`, true), 3000);
+        const deadline = Date.now() + 12000;
+        let written = null;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 500));
+          if (fs.existsSync(target)) {
+            written = fs.readFileSync(target, "utf8").trim();
+            if (written === marker) break;
+          }
+        }
+        dataSub.dispose();
+        result.detail = {
+          pidResolved,
+          written,
+          transcript: transcript.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").slice(-500),
+        };
+        result.ok = written === marker;
+      } else if (trigger.action === "terminal-mark") {
+        let transcript = "";
+        const dataSub = vscode.window.onDidWriteTerminalData
+            ? vscode.window.onDidWriteTerminalData((e) => {
+                if (e.terminal === term) transcript += e.data;
+              })
+            : { dispose() {} };
+        // Shell startup lags; sendText queues input, so poll for the side effect.
+        setTimeout(() => term.sendText(`echo ${marker} > ${target}`, true), 2500);
+        const deadline = Date.now() + 15000;
+        let written = null;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 500));
+          if (fs.existsSync(target)) {
+            written = fs.readFileSync(target, "utf8").trim();
+            if (written === marker) break;
+          }
+        }
+        dataSub.dispose();
+        result.detail = {
+          terminals: vscode.window.terminals.length,
+          termPid,
+          written,
+          transcript: transcript.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").slice(-600),
+        };
+        result.ok = written === marker;
+      } else if (trigger.action === "report") {
+        await vscode.commands.executeCommand("gbcodeConformance.report");
+        result.ok = true;
+        result.detail = "report command executed";
+      } else if (trigger.action === "state") {
+        result.ok = true;
+        result.detail = {
+          terminals: vscode.window.terminals.map((t) => t.name),
+          remoteName: vscode.env.remoteName || null,
+          appHost: vscode.env.appHost,
+        };
+      } else {
+        result.detail = "unknown action";
+      }
+    } catch (e) {
+      result.detail = "ERROR: " + e.message;
+    }
+    fs.writeFileSync(
+      path.join(resultDir, file.replace(/\.json$/, "") + "-result.json"),
+      JSON.stringify(result, null, 2)
+    );
+    output.appendLine("trigger " + file + " ok=" + result.ok);
+  }
+
+  // Poll instead of fs.watch: directory watchers are unreliable across
+  // delete/recreate cycles and some filesystems. 2s scan, processed-set guard.
+  const processed = new Set();
+  setInterval(() => {
+    let files;
+    try {
+      files = fs.readdirSync(triggerDir);
+    } catch {
+      return;
+    }
+    for (const file of files) {
+      if (file.endsWith(".json") && !file.endsWith("-result.json") && !processed.has(file)) {
+        processed.add(file);
+        handleTrigger(file);
+      }
+    }
+  }, 2000).unref();
 
   context.subscriptions.push(
     vscode.commands.registerCommand("gbcodeConformance.report", async () => {

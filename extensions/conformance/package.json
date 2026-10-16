@@ -1,7 +1,7 @@
 {
   "name": "gbcode-conformance",
   "displayName": "GBCode Conformance",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "publisher": "gbcode",
   "license": "MIT",
   "engines": {
@@ -16,7 +16,7 @@
       "description": "Conformance fixture runs read-only diagnostics and writes a report file."
     }
   },
-  "activationEvents": [],
+  "activationEvents": ["onStartupFinished"],
   "contributes": {
     "commands": [
       {
