@@ -21,6 +21,10 @@ class GbCodeApp : Application() {
     @Volatile
     var backendBaseUrl: String? = null
 
+    /** Backend credential held natively; never exposed to page JavaScript. */
+    @Volatile
+    var backendPassword: String? = null
+
     private val listeners = CopyOnWriteArrayList<(ConnectionState) -> Unit>()
 
     fun addStateListener(listener: (ConnectionState) -> Unit) {
@@ -40,6 +44,7 @@ class GbCodeApp : Application() {
         val daemonBase: String,
         val workbenchBase: String,
         val fingerprint: String,
+        val backendPassword: String? = null,
     )
 
     private fun prefs() = getSharedPreferences("gbcode", Context.MODE_PRIVATE)
@@ -51,7 +56,9 @@ class GbCodeApp : Application() {
             .putString("daemon", state.daemonBase)
             .putString("workbench", state.workbenchBase)
             .putString("fingerprint", state.fingerprint)
+            .putString("backendPassword", state.backendPassword)
             .apply()
+        backendPassword = state.backendPassword
     }
 
     fun loadPairedState(): PairedState? {
@@ -61,17 +68,20 @@ class GbCodeApp : Application() {
         val daemon = p.getString("daemon", null) ?: return null
         val workbench = p.getString("workbench", null) ?: return null
         val fp = p.getString("fingerprint", "") ?: ""
-        return PairedState(seed, appHash, daemon, workbench, fp)
+        return PairedState(seed, appHash, daemon, workbench, fp,
+            p.getString("backendPassword", null))
     }
 
     fun clearPairedState() {
         prefs().edit().clear().apply()
+        backendPassword = null
     }
 
     fun restoreFromPersisted(): Boolean {
         val saved = loadPairedState() ?: return false
         serverFingerprint = saved.fingerprint
         backendBaseUrl = saved.workbenchBase
+        backendPassword = saved.backendPassword
         connectionState = ConnectionState.PAIRED
         return true
     }

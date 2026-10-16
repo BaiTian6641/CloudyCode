@@ -27,6 +27,7 @@ class OnboardingActivity : Activity() {
     private lateinit var daemonField: EditText
     private lateinit var workbenchField: EditText
     private lateinit var secretField: EditText
+    private lateinit var passwordField: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +53,10 @@ class OnboardingActivity : Activity() {
         secretField = EditText(this)
         secretField.setSingleLine(true)
         secretField.hint = "one-time pairing secret"
+        passwordField = EditText(this)
+        passwordField.setSingleLine(true)
+        passwordField.hint = "backend password (optional; stored locally, never in page JS)"
+
 
         val pairButton = Button(this)
         pairButton.text = "Pair and connect"
@@ -69,10 +74,22 @@ class OnboardingActivity : Activity() {
         root.addView(daemonField)
         root.addView(workbenchField)
         root.addView(secretField)
+        root.addView(passwordField)
         root.addView(pairButton)
         root.addView(scroll, LinearLayout.LayoutParams(
+
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
+
+        // Debug-lane deep-fill: pairing parameters via intent extras (debug
+        // builds only). The release UX is explicit user entry; a checked QR
+        // import is S02.01 production work.
+        if (dev.gbcode.app.BuildConfig.DEBUG) {
+            intent.getStringExtra("daemon")?.let { daemonField.setText(it) }
+            intent.getStringExtra("workbench")?.let { workbenchField.setText(it) }
+            intent.getStringExtra("secret")?.let { secretField.setText(it) }
+            intent.getStringExtra("password")?.let { passwordField.setText(it) }
+        }
 
         app.addStateListener { state -> log("state: $state") }
         if (app.connectionState == ConnectionState.CONNECTED || app.restoreFromPersisted()) {
@@ -110,6 +127,7 @@ class OnboardingActivity : Activity() {
                         daemonBase = daemonBase,
                         workbenchBase = workbenchBase,
                         fingerprint = fingerprint,
+                        backendPassword = passwordField.text.toString().ifEmpty { null },
                     ))
                     app.setState(ConnectionState.CONNECTED)
                     log("paired; server fingerprint:\n$fingerprint")

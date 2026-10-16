@@ -61,9 +61,50 @@ class WorkbenchActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setContentView(root)
 
-        webView!!.loadUrl("$origin/")
+        // The backend credential stays native: we log in through the gateway
+        // from app code and hand the WebView only the session cookie.
+        val password = app.backendPassword
+        if (password != null) {
+            Thread {
+                try {
+                    val cookie = nativeLogin(origin, password)
+                    if (cookie != null) {
+                        val manager = android.webkit.CookieManager.getInstance()
+                        manager.setCookie(origin, cookie)
+                        manager.flush()
+                        android.util.Log.i("GBCodeWorkbench", "backend session cookie installed natively")
+                    }
+                    runOnUiThread { webView!!.loadUrl("$origin/") }
+                } catch (e: Exception) {
+                    android.util.Log.w("GBCodeWorkbench", "native login failed; loading anyway", e)
+                    runOnUiThread { webView!!.loadUrl("$origin/") }
+                }
+            }.start()
+        } else {
+            webView!!.loadUrl("$origin/")
+        }
     }
 
+
+    /**
+     * POST the backend login form through the gateway and return the session
+     * cookie header value, or null when the backend has no password auth.
+     * code-server: POST /login with password field -> Set-Cookie session.
+     */
+    private fun nativeLogin(origin: String, password: String): String? {
+        val body = "password=" + java.net.URLEncoder.encode(password, "UTF-8") + "&base="
+        val conn = java.net.URL("$origin/login").openConnection() as java.net.HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        conn.instanceFollowRedirects = false
+        conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        val code = conn.responseCode
+        val cookie = conn.getHeaderField("Set-Cookie")?.substringBefore(";")
+        conn.disconnect()
+        android.util.Log.i("GBCodeWorkbench", "native login HTTP $code, cookie=${cookie != null}")
+        return cookie
+    }
     override fun onDestroy() {
         webView?.destroy()
         gateway?.close()

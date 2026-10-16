@@ -106,8 +106,21 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
             out.write(rewritten.toString().toByteArray(Charsets.ISO_8859_1))
             val body = request.copyOfRange(headEnd + 4, request.size)
             if (body.isNotEmpty()) out.write(body)
+            // Forward the request body (POST/PUT): readHttpHead stops at the
+            // header boundary, so remaining body bytes are still in the stream.
+            val reqContentLength = headers.entries
+                .firstOrNull { it.key.equals("content-length", true) }
+                ?.value?.trim()?.toLongOrNull() ?: 0L
+            var bodyRemaining = reqContentLength - body.size
+            val clientIn = client.getInputStream()
+            val bodyBuf = ByteArray(64 * 1024)
+            while (bodyRemaining > 0) {
+                val n = clientIn.read(bodyBuf, 0, minOf(bodyBuf.size.toLong(), bodyRemaining).toInt())
+                if (n < 0) break
+                out.write(bodyBuf, 0, n)
+                bodyRemaining -= n
+            }
             out.flush()
-
             if (isUpgrade) {
                 // WebSocket: pipe both ways until either side closes; this
                 // connection is consumed and never reused for HTTP.
@@ -215,7 +228,7 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
         val lines = head.split("\r\n")
         for (i in 1 until lines.size) {
             val idx = lines[i].indexOf(':')
-            if (idx > 0) out[lines[i].substring(0, idx)] = lines[i].substring(idx + 1).trim()
+            if (idx > 0) out[lines[i].substring(0, idx).lowercase()] = lines[i].substring(idx + 1).trim()
         }
         return out
     }

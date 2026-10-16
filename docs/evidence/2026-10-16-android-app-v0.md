@@ -30,3 +30,9 @@ The Kotlin gateway initially kept client connections open after each response (k
 | Gateway keep-alive: sequential requests per connection, response framing by content-length/chunked/close, idle timeout | login + CSS + assets load via reused connections; `page finished` after all resources |
 | Pairing persistence: Ed25519 seed + appHash + bases + fingerprint in app-private SharedPreferences | force-stop → relaunch restores CONNECTED state and opens the workbench with no re-pairing; daemon still recognizes the enrolled app |
 | S02.01 production hardening remains: seed moves to Android Keystore; daemon-side session revocation list | recorded as production requirement, not done here |
+
+## v0.3 — gateway-held backend credential (native login)
+
+Full flow PASS on emulator: onboarding (debug prefilled fields) → pair → **native POST /login through the gateway** (password never enters page JS; session cookie installed into CookieManager for the gateway origin) → workbench loads directly to `/?folder=/tmp/gbcode-ws`, trusted via the workbench dialog, conformance extension active. Final screenshot: `S04-app-workbench-final.png`.
+
+Two real gateway bugs found and fixed by this run: header keys must be lowercased at parse time (upgrade/body-length detection silently missed `Connection: Upgrade` and `Content-Length`), and request bodies must be forwarded past the header boundary. Both are now covered behaviorally by the app's own login flow; unit coverage for the gateway belongs to the S02.06 contract tests.
