@@ -90,6 +90,12 @@ public final class MainActivity extends Activity {
         handleIntent(getIntent());
 
     }
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIntent(intent);
+    }
 
     private void attachBridge() {
         // The slice connects to exactly one loopback backend origin at a time;
@@ -117,11 +123,6 @@ public final class MainActivity extends Activity {
                 v -> log("bridgetest-recv => " + v)), 4000);
     }
 
-    @Override
-    protected void onNewIntent(android.content.Intent intent) {
-        super.onNewIntent(intent);
-        handleIntent(intent);
-    }
 
     private void handleIntent(android.content.Intent intent) {
         if (intent == null) {
@@ -148,8 +149,12 @@ public final class MainActivity extends Activity {
 
     /** Dispatch the requested scripted action once the workbench is up. */
     private void maybeDispatchAction() {
-        if (action == null || actionDispatched || loadedUrl == null
-                || loadedUrl.contains("/login")) {
+        if (action == null || actionDispatched) {
+            return;
+        }
+        // Native-only actions do not require a loaded page.
+        boolean pageRequired = !action.equals("pairtest");
+        if (pageRequired && (loadedUrl == null || loadedUrl.contains("/login"))) {
             return;
         }
         switch (action) {
@@ -193,6 +198,22 @@ public final class MainActivity extends Activity {
             case "bridgetest":
                 actionDispatched = true;
                 webView.postDelayed(this::runBridgeTest, 12_000);
+                break;
+            case "pairtest":
+                actionDispatched = true;
+                new Thread(() -> {
+                    try {
+                        String url = getIntent().getStringExtra("sessiond");
+                        String secret = getIntent().getStringExtra("secret");
+                        if (url == null) url = "http://127.0.0.1:9123";
+                        SessionClient client = new SessionClient(url);
+                        org.json.JSONObject result = client.fullFlow(secret,
+                                "nonce-apk-" + System.currentTimeMillis());
+                        log("pairtest PASS: " + result.toString());
+                    } catch (Exception e) {
+                        log("pairtest FAIL: " + android.util.Log.getStackTraceString(e));
+                    }
+                }).start();
                 break;
             case "paste":
                 actionDispatched = true;
