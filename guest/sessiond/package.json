@@ -1,0 +1,11 @@
+{
+  "name": "gbcode-sessiond",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GBCode guest session daemon (S02.02): pairing, sessions, framed channel. Node built-ins only.",
+  "main": "src/server.js",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "license": "MIT"
+}
