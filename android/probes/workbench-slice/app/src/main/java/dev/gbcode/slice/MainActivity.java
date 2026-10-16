@@ -33,6 +33,7 @@ public final class MainActivity extends Activity {
     private static final String TAG = "GBCodeSlice";
 
     private WebView webView;
+    private NativeBridge bridge;
     private TextView statusView;
     private String password;
     private String action;
@@ -84,7 +85,36 @@ public final class MainActivity extends Activity {
             }
         });
 
+        attachBridge();
+
         handleIntent(getIntent());
+
+    }
+
+    private void attachBridge() {
+        // The slice connects to exactly one loopback backend origin at a time;
+        // the allowed set is that origin only.
+        bridge = new NativeBridge("http://127.0.0.1:8083",
+                (method, payload, origin) -> log("bridge msg method=" + method
+                        + " origin=" + origin + " payload=" + payload));
+        bridge.attach(webView);
+        log("bridge supported=" + bridge.isSupported());
+    }
+
+    private void runBridgeTest() {
+        String js = "(() => {"
+                + "if (typeof gbcode === 'undefined') return 'bridge-absent';"
+                + "window.__gbReplies=[];"
+                + "gbcode.onmessage = e => window.__gbReplies.push(String(e.data));"
+                + "gbcode.postMessage(JSON.stringify({method:'ping',payload:{n:7}}));"
+                + "gbcode.postMessage(JSON.stringify({method:'getDeviceInfo',payload:{}}));"
+                + "gbcode.postMessage(JSON.stringify({method:'requestDeviceSelection',payload:{}}));"
+                + "gbcode.postMessage('{not json');"
+                + "return 'sent';})()";
+        webView.evaluateJavascript(js, value -> log("bridgetest-send => " + value));
+        webView.postDelayed(() -> webView.evaluateJavascript(
+                "'replies='+window.__gbReplies.length+' body='+window.__gbReplies.join(' || ')",
+                v -> log("bridgetest-recv => " + v)), 4000);
     }
 
     @Override
@@ -159,6 +189,10 @@ public final class MainActivity extends Activity {
             case "menupalette":
                 actionDispatched = true;
                 webView.postDelayed(() -> runMenuPath(new String[]{"View", "Command Palette"}, "menupalette"), 15_000);
+                break;
+            case "bridgetest":
+                actionDispatched = true;
+                webView.postDelayed(this::runBridgeTest, 12_000);
                 break;
             case "paste":
                 actionDispatched = true;

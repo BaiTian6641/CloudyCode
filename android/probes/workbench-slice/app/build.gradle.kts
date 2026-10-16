@@ -14,3 +14,7 @@ android {
         versionName = "0.1"
     }
 }
+
+dependencies {
+    implementation("androidx.webkit:webkit:1.14.0")
+}
