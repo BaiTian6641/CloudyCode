@@ -231,6 +231,23 @@ function activate(context) {
           remoteName: vscode.env.remoteName || null,
           appHost: vscode.env.appHost,
         };
+      } else if (trigger.action === "workspace-write") {
+        const folder = (vscode.workspace.workspaceFolders || [])[0];
+        if (!folder) throw new Error("no workspace folder open");
+        const rel = trigger.path || "gbcode-probe.txt";
+        const content = trigger.content || "gbcode-write-" + Date.now();
+        const uri = vscode.Uri.joinPath(folder.uri, rel);
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(content, "utf8"));
+        const readBack = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+        result.ok = readBack === content;
+        result.detail = { uri: uri.toString(), bytes: content.length, readBackMatches: result.ok };
+      } else if (trigger.action === "workspace-read") {
+        const folder = (vscode.workspace.workspaceFolders || [])[0];
+        if (!folder) throw new Error("no workspace folder open");
+        const uri = vscode.Uri.joinPath(folder.uri, trigger.path || "gbcode-probe.txt");
+        const data = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+        result.ok = true;
+        result.detail = { uri: uri.toString(), bytes: data.length, content: data.slice(0, 100) };
       } else {
         result.detail = "unknown action";
       }
