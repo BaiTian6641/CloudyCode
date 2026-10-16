@@ -35,9 +35,12 @@ echo "HEAD=$ACTUAL"
 
 echo "--- npm install (this is the long step)"
 CI=true npm install --no-audit --no-fund
-
-echo "--- gulp vscode-reh-web-linux-x64"
-npm run gulp -- vscode-reh-web-linux-x64
+# postinstall skips when stamps look fresh; clean-extensions-build wipes
+# extension node_modules (incl. extensions/copilot). Force the full pass.
+node build/npm/fast-install.ts --force
+echo "--- gulp vscode-reh-web-linux-x64 (GBCODE_NO_COPILOT=1, overlay 0001 required)"
+echo "NOTE: if the tree was re-cloned, reapply upstream/patches/0001-oss-control-no-copilot.md first"
+GBCODE_NO_COPILOT=1 npm run gulp -- vscode-reh-web-linux-x64
 
 echo "--- artifact"
 ls -la "$SRC/../vscode-reh-web-linux-x64" | head -20

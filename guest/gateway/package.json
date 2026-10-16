@@ -1,0 +1,11 @@
+{
+  "name": "gbcode-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "S02.03 loopback origin gateway prototype (fixed upstream HTTP+WS proxy).",
+  "main": "src/gateway.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
