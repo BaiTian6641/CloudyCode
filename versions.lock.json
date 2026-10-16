@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "fetchedAt": "2026-10-16",
+  "project": "GBCode workbench backend candidates",
+  "digestMethod": "SHA-256 as published by GitHub release asset metadata (api.github.com asset `digest` field); each artifact additionally downloaded and re-hashed locally with `sha256sum` on 2026-10-16. code-server v4.141.0 ships no separate .sha256 sidecar assets (verified: asset list contains none), so the GitHub API digest and the locally computed hash are the two independent checks.",
+  "toolchain": {
+    "nodeForCodeOSS141": {
+      "version": "24.18.0",
+      "source": "microsoft/vscode @ 2a59476c9bfcb90b3ddc372c36762471b7dfad1c `.nvmrc` (retrieved 2026-10-16, upstream review E27)"
+    },
+    "androidProbePins": {
+      "agp": "9.4.1",
+      "gradle": "9.8.1",
+      "compileSdk": 36,
+      "source": "android/probes/network-probe (build.gradle.kts; Gradle user-home cache .gradle/9.8.1)"
+    }
+  },
+  "candidates": {
+    "code-server": {
+      "version": "4.141.0",
+      "tag": "v4.141.0",
+      "releaseUrl": "https://github.com/coder/code-server/releases/tag/v4.141.0",
+      "publishedAt": "2026-10-08T08:02:54Z",
+      "license": "MIT",
+      "repoCommit": "8b41915d25547e2edd553bab03ea4cbd621f98c5",
+      "embeddedUpstreamCodeOSS": {
+        "commit": "2a59476c9bfcb90b3ddc372c36762471b7dfad1c",
+        "version": "1.141.0",
+        "note": "Resolved from pinned lib/vscode submodule gitlink at tag v4.141.0 (.gitmodules), not the About-dialog/product.json commit (see upstream review E09/E11)."
+      },
+      "artifacts": {
+        "linux-amd64": {
+          "url": "https://github.com/coder/code-server/releases/download/v4.141.0/code-server-4.141.0-linux-amd64.tar.gz",
+          "sha256": "65bcd20b524d03eb1b5adb7f360244599ef0e5b74089a46a982d32c074b97a29",
+          "verified": true
+        },
+        "linux-arm64": {
+          "url": "https://github.com/coder/code-server/releases/download/v4.141.0/code-server-4.141.0-linux-arm64.tar.gz",
+          "sha256": "e5cc78da1d631c6cf6162f9b18eeaa8ee9d3239e1a88bb99d0602cdc5fa1852d",
+          "verified": true
+        }
+      }
+    },
+    "openvscode-server": {
+      "version": "1.109.5",
+      "tag": "openvscode-server-v1.109.5",
+      "releaseUrl": "https://github.com/gitpod-io/openvscode-server/releases/tag/openvscode-server-v1.109.5",
+      "publishedAt": "2026-02-20T18:49:34Z",
+      "license": "MIT",
+      "repoCommit": "4ffe2270acdf711bbefecc3e8c79f4b3631640e5",
+      "embeddedUpstreamCodeOSS": {
+        "commit": "072586267e68ece9a47aa43f8c108e0dcbf44622",
+        "version": "1.109.5",
+        "note": "Upstream tag 1.109.5 resolves to 072586267e68ece9a47aa43f8c108e0dcbf44622; fork comparison reports it as merge base (ahead_by 17, behind_by 0) (upstream review E10)."
+      },
+      "artifacts": {
+        "linux-amd64": {
+          "url": "https://github.com/gitpod-io/openvscode-server/releases/download/openvscode-server-v1.109.5/openvscode-server-v1.109.5-linux-x64.tar.gz",
+          "sha256": "b433bf4f0227321a7014d8460d10a8f958adc0f45aa79bd889e84e65e8f88363",
+          "verified": true
+        },
+        "linux-arm64": {
+          "url": "https://github.com/gitpod-io/openvscode-server/releases/download/openvscode-server-v1.109.5/openvscode-server-v1.109.5-linux-arm64.tar.gz",
+          "sha256": "36d9c14036489b63de84ebace837fcacf7e60e669a0dc715802c5443684ea4dc",
+          "verified": true
+        }
+      }
+    }
+  }
+}
