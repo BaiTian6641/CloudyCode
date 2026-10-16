@@ -10,6 +10,7 @@ const path = require("path");
 const { loadServerIdentity, fingerprint, sign, verify, publicKeyFromRaw, constantTimeEqual, b64u, sha256Hex } = require("./keys");
 const { TokenIssuer } = require("./tokens");
 const { acceptKey, encodeFrame, FrameParser, OPCODES } = require("./ws");
+const { DeviceRegistry } = require("./devices");
 
 const MAX_BODY = 64 * 1024;
 const PAIR_ATTEMPT_WINDOW_MS = 60_000;
@@ -27,6 +28,7 @@ class SessionDaemon {
     this.pairAttempts = new Map(); // ip -> [timestamps]
     this.challenges = new Map();   // appHash -> { nonce, expiresAt }
     this.channelSockets = new Set();
+    this.registry = new DeviceRegistry();
     this.ops = {
       "session.hello": (payload) => ({
         agent: "gbcode-sessiond/0.1.0",
@@ -40,7 +42,23 @@ class SessionDaemon {
         limits: { controlFrame: 65536, binaryFrame: 1048576, inFlight: 64 },
       }),
       "session.ping": (payload) => ({ pong: payload && payload.n !== undefined ? payload.n : null }),
-      "device.list": () => ({ devices: [], note: "hardware providers load in S05/U01" }),
+      "device.list": () => ({ devices: this.registry.list() }),
+      "device.requestLease": (payload, session) => {
+        const lease = this.registry.requestLease({
+          deviceId: payload && payload.deviceId,
+          incarnation: payload && payload.incarnation,
+          sessionSid: session.sid,
+          ttlMs: payload && typeof payload.ttlMs === "number" ? Math.min(payload.ttlMs, 300_000) : undefined,
+        });
+        return { lease };
+      },
+      "device.releaseLease": (payload, session) => {
+        return this.registry.releaseLease({
+          deviceId: payload && payload.deviceId,
+          leaseId: payload && payload.leaseId,
+          sessionSid: session.sid,
+        });
+      },
       "session.close": () => ({ closing: true }),
     };
 
@@ -214,7 +232,7 @@ class SessionDaemon {
         const out = handler(msg.payload, session);
         this.sendControl(socket, { v: 1, id: msg.id, ok: true, payload: out });
       } catch (e) {
-        this.sendControl(socket, { v: 1, id: msg.id, ok: false, error: { code: "op_failed", message: e.message, retriable: false } });
+        this.sendControl(socket, { v: 1, id: msg.id, ok: false, error: { code: e.code || "op_failed", message: e.message, retriable: e.code === "device_busy" } });
       }
     });
     socket.on("data", (chunk) => {
