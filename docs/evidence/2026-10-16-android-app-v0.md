@@ -18,7 +18,15 @@ The Kotlin gateway initially kept client connections open after each response (k
 
 ## Known v0 gaps (recorded, not hidden)
 
-1. **No persistence:** app identity/session live in process memory; process death → re-pair required (S02.01 production step: Ed25519 seed in Android Keystore, paired-state restore).
+1. ~~No persistence~~ **fixed in v0.2:** enrolled identity persists app-private and survives force-stop/relaunch; Keystore hardening is the remaining S02.01 production step.
 2. **Login is via the code-server password form in the WebView** (works; production S02.03 moves the credential into the gateway so page JS never sees it).
 3. **Emulator focus interference:** a stray system Theme-settings app on the test AVD repeatedly stole foreground during automation; app behavior itself is unaffected. Desktop windowing/multi-window behavior is the physical lane.
 4. No guest-side backend launch yet: v0 connects to a pre-running backend; S09 bootstrap + Terminal-driven start is the physical flow.
+
+## v0.2 hardening (same session, follow-up commit)
+
+| Fix | Evidence |
+|---|---|
+| Gateway keep-alive: sequential requests per connection, response framing by content-length/chunked/close, idle timeout | login + CSS + assets load via reused connections; `page finished` after all resources |
+| Pairing persistence: Ed25519 seed + appHash + bases + fingerprint in app-private SharedPreferences | force-stop → relaunch restores CONNECTED state and opens the workbench with no re-pairing; daemon still recognizes the enrolled app |
+| S02.01 production hardening remains: seed moves to Android Keystore; daemon-side session revocation list | recorded as production requirement, not done here |
