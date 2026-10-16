@@ -19,6 +19,23 @@ Workstation and emulator evidence (docs/evidence/2026-10-16-S01-*.md):
 - Both candidates: extension-host terminal creation stalls (`processId` never resolves; ptyhost log empty). Initially recorded as shared upstream behavior; **the pristine control later proved it a candidate regression** (see "Explicitly not decided"). Browser/user-path terminals work on both candidates and on pristine upstream.
 - OpenVSCode differences: ~8-month-older runtime (1.109.5, Node 22), minimal-patch objective (smaller audit surface), auto-trusted a folder code-server restricted, Docker default is unauthenticated (we require explicit token), token honored via `--connection-token-file`.
 - code-server differences: current upstream (1.141.0, Node 24), `--enable-remote-storage` option (needs secret-storage audit, E13), self-hosted webviews (needs origin audit, E12), Coder promo banner + agent sidebar (removable), Restricted Mode honored. **Regression found after U03.01: extension-host terminal creation stalls on code-server 4.141.0 (and OpenVSCode 1.109.5) but works on pristine upstream 1.141.0 — see below.**
+
+## Evidence accumulated after the provisional selection (2026-10-16)
+
+| Lane | code-server 4.141.0 | OpenVSCode 1.109.5 | Pristine control 1.141.0 |
+|---|---|---|---|
+| Authenticated workbench (Chromium) | PASS | PASS | PASS |
+| Workbench in Android WebView (emulator) | PASS — full slice (login, terminal command, conformance webview) | PASS — workbench + extension active | (not run in APK; same upstream server) |
+| Terminal execution (browser path) | PASS | PASS | PASS |
+| Extension-host terminal spawn | **STALL (regression)** | **STALL (regression)** | **PASS** |
+| Workspace Trust | Restricted honored | auto-trusted folder | Restricted honored |
+| Conformance extension (webview/CSP/tree/output/workspace.fs) | PASS | PASS | PASS |
+| Cold start median (this host) | 264 ms | not re-measured | 261 ms |
+| Structural parity vs control | Ports panel extra | older upstream baseline | reference |
+| Guest ARM64 package | official artifact (verified digest) | official artifact (verified digest) | built from source (overlay) |
+
+The provisional choice stands: current upstream, active maintenance, verified digests. The terminal-spawn regression is tracked as a required patch/investigation item (S09.02 dependency) and re-test at each candidate upgrade.
+
 ## Decision
 
 **Develop against code-server 4.141.0** (pinned commit/artifacts in `versions.lock.json`), with OpenVSCode Server retained as the documented fallback. Selection rationale:
