@@ -27,3 +27,8 @@
 ## Not established here
 
 Physical Terminal-VM route, guest placement of the backend, OpenVSCode APK lane (workstation lane parity suggests similar behavior; S01.06 decides), keyboard/IME desktop behavior, file editing save-cycle inside WebView (next: S03/S04 fixtures).
+
+
+## OpenVSCode APK lane (follow-up, same fixture)
+
+The slice APK loaded OpenVSCode Server 1.109.5 in the WebView over `adb reverse` with the token-authenticated URL: `isSecureContext=true`, service worker present, workbench present, restored terminal and the conformance extension active (title "GBCode Conformance - gbcode-ws - OpenVSCode Server"). Both backend candidates have APK-lane evidence; code-server's lane additionally includes terminal command execution and the gateway path.
