@@ -236,4 +236,88 @@ class GatewayTest {
         assertTrue("request must terminate", latch.await(12, TimeUnit.SECONDS))
         assertTrue("expected 502 or connection failure, got $outcome", outcome == 502 || outcome == -2)
     }
+
+    @Test
+    fun keepAliveReusesConnection() {
+        // Upstream keeps connections alive and counts responses.
+        val responses = java.util.concurrent.atomic.AtomicInteger(0)
+        val server = ServerSocket()
+        server.bind(InetSocketAddress("127.0.0.1", 0))
+        val serverThread = Thread {
+            while (!server.isClosed) {
+                try {
+                    val c = server.accept()
+                    Thread {
+                        try {
+                            val input = c.getInputStream()
+                            val out = c.getOutputStream()
+                            while (true) {
+                                val head = ByteArrayOutputStream()
+                                var p3 = -1; var p2 = -1; var p1 = -1; var b: Int
+                                while (input.read().also { b = it } != -1) {
+                                    head.write(b)
+                                    if (p3 == 13 && p2 == 10 && p1 == 13 && b == 10) break
+                                    p3 = p2; p2 = p1; p1 = b
+                                }
+                                if (head.size() == 0) break
+                                val body = "{\"n\":${responses.incrementAndGet()}}".toByteArray()
+                                out.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" +
+                                        "Content-Length: ${body.size}\r\nConnection: keep-alive\r\n\r\n")
+                                    .toByteArray(Charsets.ISO_8859_1))
+                                out.write(body)
+                                out.flush()
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }.apply { isDaemon = true }.start()
+                } catch (_: Exception) { break }
+            }
+        }
+        serverThread.isDaemon = true
+        serverThread.start()
+
+        val gw = Gateway("127.0.0.1", server.localPort)
+        gw.start()
+        try {
+            // Two sequential requests on ONE raw client socket: proves the
+            // gateway's keep-alive loop answers both on the same connection.
+            val client = Socket()
+            client.connect(InetSocketAddress("127.0.0.1", gw.port), 5000)
+            client.soTimeout = 8000
+            val out = client.getOutputStream()
+            val input = client.getInputStream()
+            fun exchange(): String {
+                out.write(("GET /json HTTP/1.1\r\nHost: 127.0.0.1:${gw.port}\r\n\r\n")
+                    .toByteArray(Charsets.ISO_8859_1))
+                out.flush()
+                val head = ByteArrayOutputStream()
+                var p3 = -1; var p2 = -1; var p1 = -1; var b: Int
+                while (input.read().also { b = it } != -1) {
+                    head.write(b)
+                    if (p3 == 13 && p2 == 10 && p1 == 13 && b == 10) break
+                    p3 = p2; p2 = p1; p1 = b
+                }
+                val headText = String(head.toByteArray(), Charsets.ISO_8859_1)
+                val len = headText.split("\r\n")
+                    .firstOrNull { it.startsWith("Content-Length:", true) }
+                    ?.substringAfter(':')?.trim()?.toIntOrNull() ?: 0
+                val body = ByteArray(len)
+                var off = 0
+                while (off < len) {
+                    val r = input.read(body, off, len - off)
+                    if (r < 0) break
+                    off += r
+                }
+                return String(body)
+            }
+            val first = exchange()
+            val second = exchange()
+            assertTrue("first: $first", first.contains("\"n\":1"))
+            assertTrue("second: $second", second.contains("\"n\":2"))
+            client.close()
+        } finally {
+            gw.close()
+            try { server.close() } catch (_: Exception) {}
+        }
+    }
 }
