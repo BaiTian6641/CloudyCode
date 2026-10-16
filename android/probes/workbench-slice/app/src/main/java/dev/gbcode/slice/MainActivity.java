@@ -164,8 +164,8 @@ public final class MainActivity extends Activity {
                 actionDispatched = true;
                 webView.postDelayed(() -> {
                     String feed = "(() => {"
-                            + "const ta=document.querySelector('.xterm-helper-textarea');"
-                            + "if(!ta) return 'no-xterm-textarea';"
+                            + "const tas=[...document.querySelectorAll('.terminal.active .xterm-helper-textarea, .xterm-helper-textarea')];"
+                            + "const ta=tas[tas.length-1];"
                             + "ta.focus();"
                             + "const cmd='echo GBCODE_SLICE_WEBVIEW_OK > /tmp/gbcode-slice-user.txt';"
                             + "ta.value=cmd;"

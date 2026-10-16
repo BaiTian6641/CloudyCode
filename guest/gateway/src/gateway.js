@@ -14,20 +14,28 @@ const HOP_BY_HOP = new Set([
   "te", "trailer", "transfer-encoding", "upgrade",
 ]);
 
-function createGateway({ listenHost = "127.0.0.1", listenPort = 0, upstream, maxHeaderBytes = 64 * 1024 }) {
+function createGateway({ listenHost = "127.0.0.1", listenPort = 0, upstream, maxHeaderBytes = 64 * 1024, rewriteOrigin = true }) {
   if (!upstream) throw new Error("upstream URL required");
   const upstreamUrl = new URL(upstream);
   const upstreamPort = Number(upstreamUrl.port || (upstreamUrl.protocol === "https:" ? 443 : 80));
   const upstreamHost = upstreamUrl.hostname;
+  const upstreamOrigin = `${upstreamUrl.protocol}//${upstreamUrl.host}`;
+  function fixOriginHeaders(headers) {
+    if (!rewriteOrigin) return headers;
+    const out = { ...headers };
+    if (out.origin) out.origin = upstreamOrigin;
+    if (out.referer) out.referer = upstreamOrigin + "/";
+    return out;
+  }
 
   const server = http.createServer((req, res) => {
-    req.pause();
+    console.log("[http]", req.method, req.url);
     const options = {
       host: upstreamHost,
       port: upstreamPort,
       path: req.url,
       method: req.method,
-      headers: { ...req.headers, host: upstreamUrl.host },
+      headers: fixOriginHeaders({ ...req.headers, host: upstreamUrl.host }),
     };
     for (const key of Object.keys(options.headers)) {
       if (HOP_BY_HOP.has(key.toLowerCase())) delete options.headers[key];
@@ -48,12 +56,13 @@ function createGateway({ listenHost = "127.0.0.1", listenPort = 0, upstream, max
       res.end(JSON.stringify({ v: 1, error: { code: "upstream_unavailable", message: err.code } }));
     });
     req.pipe(proxyReq);
-    req.resume();
   });
 
   server.on("upgrade", (req, clientSocket, head) => {
+    const openedAt = Date.now();
+    console.log(`[ws] open ${req.url}`);
     const upstreamSocket = net.connect(upstreamPort, upstreamHost, () => {
-      const headers = { ...req.headers, host: upstreamUrl.host };
+      const headers = fixOriginHeaders({ ...req.headers, host: upstreamUrl.host });
       let request = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
       for (const [key, value] of Object.entries(headers)) {
         if (!HOP_BY_HOP.has(key.toLowerCase()) || key.toLowerCase() === "upgrade" || key.toLowerCase() === "connection") {
@@ -66,14 +75,17 @@ function createGateway({ listenHost = "127.0.0.1", listenPort = 0, upstream, max
       clientSocket.pipe(upstreamSocket);
       upstreamSocket.pipe(clientSocket);
     });
-    const fail = () => {
+    const fail = (why) => {
+      console.log(`[ws] close ${req.url} after ${Date.now() - openedAt}ms (${why})`);
       clientSocket.destroy();
       upstreamSocket.destroy();
     };
-    upstreamSocket.on("error", fail);
-    clientSocket.on("error", fail);
+    upstreamSocket.on("error", (e) => fail("upstream " + e.code));
+    clientSocket.on("error", (e) => fail("client " + e.code));
+    clientSocket.on("close", () => fail("client close"));
+    upstreamSocket.on("close", () => fail("upstream close"));
     // Guard against unbounded idle tunnels: 6h max, configurable later.
-    upstreamSocket.setTimeout(6 * 3600_000, fail);
+    upstreamSocket.setTimeout(6 * 3600_000, () => fail("idle timeout"));
   });
 
   server.maxHeadersCount = 0; // use byte cap instead

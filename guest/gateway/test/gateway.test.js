@@ -146,3 +146,26 @@ test("upstream down yields 502 json", async () => {
   assert.equal(body.error.code, "upstream_unavailable");
   gw.server.close();
 });
+
+test("origin/referer are rewritten to the upstream origin when enabled", async () => {
+  const upstream = http.createServer((req, res) => {
+    if (req.headers.origin && req.headers.origin !== `http://127.0.0.1:${upstream.address().port}`) {
+      res.writeHead(403); res.end("bad origin"); return;
+    }
+    const body = Buffer.from(JSON.stringify({ origin: req.headers.origin || null }));
+    res.writeHead(200, { "content-type": "application/json", "content-length": body.length });
+    res.end(body);
+  });
+  await new Promise((r) => upstream.listen(0, "127.0.0.1", r));
+  const gw = await createGateway({ upstream: `http://127.0.0.1:${upstream.address().port}` });
+
+  const resp = await fetch(`http://127.0.0.1:${gw.port}/json`, { headers: { origin: `http://127.0.0.1:${gw.port}` } });
+  assert.equal(resp.status, 200);
+  const body = await resp.json();
+  assert.equal(body.origin, `http://127.0.0.1:${upstream.address().port}`);
+
+  gw.server.closeAllConnections?.();
+  gw.server.close();
+  upstream.closeAllConnections?.();
+  upstream.close();
+});
