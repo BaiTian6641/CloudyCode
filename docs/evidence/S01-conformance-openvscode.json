@@ -1,0 +1,30 @@
+{
+  "marker": "GBCODE-CONFORMANCE-0.1",
+  "ts": "2026-10-16T06:41:57.239Z",
+  "extensionHost": {
+    "extensionKind": "ui",
+    "remoteName": "127.0.0.1:8081",
+    "appName": "OpenVSCode Server",
+    "appHost": "openvscode-server",
+    "uiKind": "web",
+    "node": "v22.21.1",
+    "arch": "x64",
+    "platform": "linux",
+    "pid": 3087789
+  },
+  "host": {
+    "uname": "Linux polar-hpzbookultrag1a14inchmobileworkstationpc 7.0.0-38-generic #38-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep  4 09:10:14 UTC 2026 x86_64 GNU/Linux",
+    "osRelease": "PRETTY_NAME=\"Ubuntu 26.04.1 LTS\"",
+    "shell": "/bin/bash",
+    "home": "/home/polar"
+  },
+  "workspace": {
+    "folders": [],
+    "isTrusted": true
+  },
+  "product": {
+    "nameShort": "OpenVSCode Server",
+    "version": "1.109.5",
+    "commit": "072586267e68ece9a47aa43f8c108e0dcbf44622"
+  }
+}

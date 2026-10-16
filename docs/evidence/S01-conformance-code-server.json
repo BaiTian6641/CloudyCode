@@ -1,0 +1,30 @@
+{
+  "marker": "GBCODE-CONFORMANCE-0.1",
+  "ts": "2026-10-16T06:41:11.389Z",
+  "extensionHost": {
+    "extensionKind": "ui",
+    "remoteName": "127.0.0.1:8080",
+    "appName": "code-server",
+    "appHost": "server-distro",
+    "uiKind": "web",
+    "node": "v24.21.0",
+    "arch": "x64",
+    "platform": "linux",
+    "pid": 3086736
+  },
+  "host": {
+    "uname": "Linux polar-hpzbookultrag1a14inchmobileworkstationpc 7.0.0-38-generic #38-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep  4 09:10:14 UTC 2026 x86_64 GNU/Linux",
+    "osRelease": "PRETTY_NAME=\"Ubuntu 26.04.1 LTS\"",
+    "shell": "/bin/bash",
+    "home": "/home/polar"
+  },
+  "workspace": {
+    "folders": [],
+    "isTrusted": true
+  },
+  "product": {
+    "nameShort": "code-server",
+    "version": "1.141.0",
+    "commit": "8b41915d25547e2edd553bab03ea4cbd621f98c5"
+  }
+}

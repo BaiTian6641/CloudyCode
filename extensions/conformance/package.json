@@ -1,0 +1,45 @@
+{
+  "name": "gbcode-conformance",
+  "displayName": "GBCode Conformance",
+  "version": "0.1.2",
+  "publisher": "gbcode",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "extensionKind": ["workspace"],
+  "main": "./extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "Conformance fixture runs read-only diagnostics and writes a report file."
+    }
+  },
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "gbcodeConformance.report",
+        "title": "GBCode: Run Conformance Report"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gbcode-conformance",
+          "title": "GBCode Conformance",
+          "icon": "$(beaker)"
+        }
+      ]
+    },
+    "views": {
+      "gbcode-conformance": [
+        {
+          "id": "gbcodeConformance.status",
+          "name": "Conformance Status"
+        }
+      ]
+    }
+  }
+}
