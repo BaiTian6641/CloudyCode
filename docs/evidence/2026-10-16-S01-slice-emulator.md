@@ -26,7 +26,7 @@
 
 ## Not established here
 
-Physical Terminal-VM route, guest placement of the backend, OpenVSCode APK lane (workstation lane parity suggests similar behavior; S01.06 decides), keyboard/IME desktop behavior, file editing save-cycle inside WebView (next: S03/S04 fixtures).
+Physical Terminal-VM route, guest placement of the backend, keyboard/IME desktop behavior, file editing save-cycle inside WebView (S03.03 covers the authority path; the editor UX path is the physical lane).
 
 
 ## OpenVSCode APK lane (follow-up, same fixture)
