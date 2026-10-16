@@ -34,3 +34,4 @@ Read [README.md](README.md), the [stage-plan index](docs/plan/README.md), and th
 - Worker model allocation: `zai/glm-5.3-flash` for routine subagent work, `kimi-code/k3:max` for hard tasks. Verify requested selectors via `omp models find` before spawning.
 - No destructive hardware operations (firmware erase/write, VM reset, eFuse changes), production signing, or publishing without explicit human approval.
 - Commit each completed milestone with a meaningful message; keep `git status --short` clean between milestones.
+- **No `sed`/`perl`/shell one-liners for code edits.** Use the `edit` tool for all source changes. Three broken files in one session traced to sed-based edits silently deleting lines (`proxyRes.pipe`, `upstreamSocket.write`) — every such incident costs more than it saves.
