@@ -7,7 +7,7 @@
 *.p12
 *.pfx
 *.key
-/local.properties
+local.properties
 /android/local.properties
 
 # Android / Gradle / Kotlin build output
