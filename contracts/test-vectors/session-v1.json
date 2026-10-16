@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "contract": "session-v1",
+  "description": "Golden vectors exercised against a live gbcode-sessiond channel. Dynamic fields (fingerprint, echo passthrough) use presence/type checks rather than byte equality.",
+  "vectors": [
+    {
+      "id": "hello-basic",
+      "send": { "v": 1, "id": 1, "op": "session.hello", "payload": { "echo": "hi" } },
+      "expect": {
+        "id": 1,
+        "ok": true,
+        "payload": { "agent": "gbcode-sessiond/0.1.0", "protocol": 1, "echo": "hi" },
+        "payloadContains": { "fingerprint": "hex64" }
+      }
+    },
+    {
+      "id": "capabilities-limits",
+      "send": { "v": 1, "id": 2, "op": "session.capabilities" },
+      "expect": {
+        "id": 2,
+        "ok": true,
+        "payloadContains": { "protocol": 1 },
+        "payloadHas": ["ops", "limits"]
+      }
+    },
+    {
+      "id": "ping-numeric",
+      "send": { "v": 1, "id": 3, "op": "session.ping", "payload": { "n": 42 } },
+      "expect": { "id": 3, "ok": true, "payload": { "pong": 42 } }
+    },
+    {
+      "id": "unsupported-op",
+      "send": { "v": 1, "id": 4, "op": "device.eraseFlash" },
+      "expect": { "id": 4, "ok": false, "error": { "code": "unsupported_op", "retriable": false } }
+    },
+    {
+      "id": "missing-fields",
+      "send": { "v": 1, "id": 5 },
+      "expect": { "id": 5, "ok": false, "error": { "code": "bad_frame", "retriable": false } }
+    },
+    {
+      "id": "device-list-empty",
+      "send": { "v": 1, "id": 6, "op": "device.list" },
+      "expect": {
+        "id": 6,
+        "ok": true,
+        "payloadContains": { "devices": "arrayEmpty" }
+      }
+    }
+  ]
+}

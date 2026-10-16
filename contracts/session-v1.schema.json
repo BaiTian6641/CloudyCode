@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gbcode.dev/contracts/session-v1.schema.json",
+  "title": "GBCode session control envelope v1",
+  "description": "Control-frame schema for contracts/session-v1.md (draft frozen by S02.06).",
+  "type": "object",
+  "required": ["v", "id"],
+  "properties": {
+    "v": { "const": 1 },
+    "id": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "op": { "type": "string", "maxLength": 64 },
+    "payload": { "type": "object" },
+    "ok": { "type": "boolean" },
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "retriable"],
+      "properties": {
+        "code": { "type": "string", "maxLength": 64 },
+        "message": { "type": "string", "maxLength": 512 },
+        "retriable": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "required": ["op"],
+      "properties": {
+        "ok": { "not": {} },
+        "error": { "not": {} }
+      }
+    },
+    {
+      "required": ["ok"],
+      "if": { "properties": { "ok": { "const": false } } },
+      "then": { "required": ["error"] }
+    }
+  ],
+  "additionalProperties": true
+}
