@@ -42,3 +42,7 @@
 
 # Private device evidence; publish only reviewed, redacted records
 /docs/evidence/private/
+
+# Probe run artifacts (curated copies live in docs/evidence/)
+/tools/echo-server/results.jsonl
+/android/probes/**/local.properties

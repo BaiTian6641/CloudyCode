@@ -1,0 +1,98 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GBCode WebView capability fixture</title>
+<body>
+<h1>GBCode WebView capability fixture</h1>
+<pre id="out">running…</pre>
+<script>
+"use strict";
+const out = [];
+const results = { source: "webview", ts: new Date().toISOString() };
+function log(name, value) {
+  out.push(name + ": " + value);
+  document.getElementById("out").textContent = out.join("\n");
+}
+function finish(name, pass, detail) {
+  results[name] = { pass: !!pass, detail: String(detail) };
+  log(name, (pass ? "PASS" : "FAIL") + " — " + detail);
+}
+async function sha256Hex(buf) {
+  const d = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+(async () => {
+  finish("secureContext", window.isSecureContext === true, String(window.isSecureContext));
+  finish("location", true, location.href);
+  finish("userAgent", true, navigator.userAgent);
+
+  try {
+    const w = new Worker(URL.createObjectURL(new Blob(
+      ["onmessage = e => postMessage(e.data * 2)"], { type: "text/javascript" })));
+    const got = await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("worker timeout")), 5000);
+      w.onmessage = e => { clearTimeout(t); resolve(e.data); };
+      w.postMessage(21);
+    });
+    w.terminate();
+    finish("worker", got === 42, "roundtrip=" + got);
+  } catch (e) { finish("worker", false, e.message); }
+
+  try {
+    if (!("serviceWorker" in navigator)) throw new Error("no serviceWorker API");
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    finish("serviceWorker", !!reg, "scope=" + reg.scope);
+  } catch (e) { finish("serviceWorker", false, e.message); }
+
+  try {
+    const payload = new Uint8Array(512);
+    crypto.getRandomValues(payload);
+    const expected = await sha256Hex(payload.buffer);
+    const ws = new WebSocket("ws://" + location.host + "/ws");
+    ws.binaryType = "arraybuffer";
+    const echoed = await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("ws timeout")), 8000);
+      ws.onopen = () => ws.send(payload);
+      ws.onmessage = e => { clearTimeout(t); resolve(e.data); };
+      ws.onerror = () => { clearTimeout(t); reject(new Error("ws error")); };
+    });
+    const actual = await sha256Hex(echoed);
+    ws.close();
+    finish("wsBinary", expected === actual, expected === actual ? "sha256 match (512B)" : "mismatch");
+  } catch (e) { finish("wsBinary", false, e.message); }
+
+  try {
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open("gbcode-probe", 1);
+      req.onupgradeneeded = () => req.result.createObjectStore("kv");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").put("v", "k");
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+    finish("indexedDb", true, "open/put ok");
+  } catch (e) { finish("indexedDb", false, e.message); }
+
+  try {
+    localStorage.setItem("gbcode-probe", "1");
+    finish("localStorage", localStorage.getItem("gbcode-probe") === "1", "set/get");
+  } catch (e) { finish("localStorage", false, e.message); }
+
+  finish("display", true, innerWidth + "x" + innerHeight + " dpr=" + devicePixelRatio);
+
+  document.getElementById("out").textContent = out.join("\n") + "\nreporting…";
+  try {
+    const resp = await fetch("/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(results),
+    });
+    log("report", "HTTP " + resp.status);
+  } catch (e) {
+    log("report", "FAILED " + e.message);
+  }
+})();
+</script>
