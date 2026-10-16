@@ -1,0 +1,32 @@
+{
+  "marker": "GBCODE-CONFORMANCE-0.1",
+  "ts": "2026-10-16T09:04:09.170Z",
+  "extensionHost": {
+    "extensionKind": "ui",
+    "remoteName": "127.0.0.1:8082",
+    "appName": "Code - OSS",
+    "appHost": "server-distro",
+    "uiKind": "web",
+    "node": "v24.21.0",
+    "arch": "x64",
+    "platform": "linux",
+    "pid": 3287443
+  },
+  "host": {
+    "uname": "Linux polar-hpzbookultrag1a14inchmobileworkstationpc 7.0.0-38-generic #38-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep  4 09:10:14 UTC 2026 x86_64 GNU/Linux",
+    "osRelease": "PRETTY_NAME=\"Ubuntu 26.04.1 LTS\"",
+    "shell": "/bin/bash",
+    "home": "/home/polar"
+  },
+  "workspace": {
+    "folders": [
+      "file:///tmp/gbcode-ws"
+    ],
+    "isTrusted": false
+  },
+  "product": {
+    "nameShort": "Code - OSS",
+    "version": "1.141.0",
+    "commit": "2a59476c9bfcb90b3ddc372c36762471b7dfad1c"
+  }
+}

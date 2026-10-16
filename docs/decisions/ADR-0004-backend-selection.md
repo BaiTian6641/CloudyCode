@@ -16,10 +16,9 @@ Two maintained candidates were pinned in `versions.lock.json` with verified dige
 Workstation and emulator evidence (docs/evidence/2026-10-16-S01-*.md):
 
 - Both: authenticated login, real workbench in browser and **in Android WebView** (code-server lane), integrated terminal executing commands, VSIX installation, conformance extension with webview/CSP/tree/output, Workspace Trust enforcement.
-- Both: **extension-host terminal creation stalls** (`processId` never resolves; ptyhost log empty) — shared upstream behavior, not a discriminator. Browser/user-path terminals work on both.
-- code-server differences: current upstream (1.141.0, Node 24), `--enable-remote-storage` option (needs secret-storage audit, E13), self-hosted webviews (needs origin audit, E12), Coder promo banner + agent sidebar (removable), Restricted Mode honored.
+- Both candidates: extension-host terminal creation stalls (`processId` never resolves; ptyhost log empty). Initially recorded as shared upstream behavior; **the pristine control later proved it a candidate regression** (see "Explicitly not decided"). Browser/user-path terminals work on both candidates and on pristine upstream.
 - OpenVSCode differences: ~8-month-older runtime (1.109.5, Node 22), minimal-patch objective (smaller audit surface), auto-trusted a folder code-server restricted, Docker default is unauthenticated (we require explicit token), token honored via `--connection-token-file`.
-
+- code-server differences: current upstream (1.141.0, Node 24), `--enable-remote-storage` option (needs secret-storage audit, E13), self-hosted webviews (needs origin audit, E12), Coder promo banner + agent sidebar (removable), Restricted Mode honored. **Regression found after U03.01: extension-host terminal creation stalls on code-server 4.141.0 (and OpenVSCode 1.109.5) but works on pristine upstream 1.141.0 — see below.**
 ## Decision
 
 **Develop against code-server 4.141.0** (pinned commit/artifacts in `versions.lock.json`), with OpenVSCode Server retained as the documented fallback. Selection rationale:
@@ -31,7 +30,7 @@ Workstation and emulator evidence (docs/evidence/2026-10-16-S01-*.md):
 **Fallback trigger:** switch to OpenVSCode only via a new ADR if code-server shows a blocker it cannot resolve with a maintainable patch (e.g., webview origin model incompatible with the native-bridge isolation requirement, or unmaintainable upgrade cost measured in U03).
 
 ## Explicitly not decided here
-
+- Extension-host terminal stall is a **candidate regression, not upstream**: pristine Code - OSS 1.141.0 reh-web spawns extension-created terminals correctly (pid + sendText execution verified, `docs/evidence/U03-conformance-upstream-control.json`, trigger t13). code-server 4.141.0 and OpenVSCode 1.109.5 both stall (`processId` never resolves, ptyhost log empty). This becomes a required code-server patch/investigation item before S09.02 daemon-managed terminal flows depend on it, and a re-test item at each candidate upgrade. User/browser-path terminal creation works on all three.
 - No production approval: the physical Terminal-VM lane (guest ARM64 package, forwarding behavior, Terminal lifecycle) is untested and remains a release gate (S01.06 exit, S09).
 - No Marketplace/proprietary enablement: registry stays Open VSX/VSIX per ADR-0002.
 - Extension-host terminal stall is accepted as a design constraint: interactive terminals are browser-path (user) or guest-daemon managed; the companion extension must not rely on server-side interactive terminal spawning (recorded for S02.02 and S09.02).
