@@ -1,0 +1,47 @@
+# ADR-0004: Backend selection for the GBCode workbench (provisional, development)
+
+- **Status:** Provisional — selected for development; final approval (S01.06 exit gate) requires the physical Googlebook lane after device release.
+- **Date:** 2026-10-16
+- **Depends on:** S01.01 (locks), S01.02/.03 (workstation lane), S01.04 (conformance), S01.05 (emulator vertical slice); U03.01 upstream control build in progress.
+
+## Context
+
+Two maintained candidates were pinned in `versions.lock.json` with verified digests:
+
+| Candidate | Server release | Embedded Code - OSS | Freshness gap |
+|---|---|---|---|
+| code-server | 4.141.0 (2026-10-08, commit `8b41915d…`) | 1.141.0 (`2a59476c…`) | current |
+| OpenVSCode Server | 1.109.5 (2026-02-20, commit `4ffe2270…`) | 1.109.5 (`07258626…`) | ~8 months older |
+
+Workstation and emulator evidence (docs/evidence/2026-10-16-S01-*.md):
+
+- Both: authenticated login, real workbench in browser and **in Android WebView** (code-server lane), integrated terminal executing commands, VSIX installation, conformance extension with webview/CSP/tree/output, Workspace Trust enforcement.
+- Both: **extension-host terminal creation stalls** (`processId` never resolves; ptyhost log empty) — shared upstream behavior, not a discriminator. Browser/user-path terminals work on both.
+- code-server differences: current upstream (1.141.0, Node 24), `--enable-remote-storage` option (needs secret-storage audit, E13), self-hosted webviews (needs origin audit, E12), Coder promo banner + agent sidebar (removable), Restricted Mode honored.
+- OpenVSCode differences: ~8-month-older runtime (1.109.5, Node 22), minimal-patch objective (smaller audit surface), auto-trusted a folder code-server restricted, Docker default is unauthenticated (we require explicit token), token honored via `--connection-token-file`.
+
+## Decision
+
+**Develop against code-server 4.141.0** (pinned commit/artifacts in `versions.lock.json`), with OpenVSCode Server retained as the documented fallback. Selection rationale:
+
+1. Security freshness and maintenance cadence outweigh the smaller patch surface of a release 8 months behind upstream (upstream review §3.1 rule: smaller patch set never overrides missing fixes).
+2. Workstation + emulator behavior is equal on the measured surfaces; the one differentiator observed (extension-host terminal stall) affects both.
+3. code-server's additional patches are known and bounded (webview origin, secret storage, product overrides); they become explicit S02.03/U03 review items rather than unknowns.
+
+**Fallback trigger:** switch to OpenVSCode only via a new ADR if code-server shows a blocker it cannot resolve with a maintainable patch (e.g., webview origin model incompatible with the native-bridge isolation requirement, or unmaintainable upgrade cost measured in U03).
+
+## Explicitly not decided here
+
+- No production approval: the physical Terminal-VM lane (guest ARM64 package, forwarding behavior, Terminal lifecycle) is untested and remains a release gate (S01.06 exit, S09).
+- No Marketplace/proprietary enablement: registry stays Open VSX/VSIX per ADR-0002.
+- Extension-host terminal stall is accepted as a design constraint: interactive terminals are browser-path (user) or guest-daemon managed; the companion extension must not rely on server-side interactive terminal spawning (recorded for S02.02 and S09.02).
+
+## Consequences
+
+- S02 origin/gateway work targets code-server 4.141.0 behavior first; patch inventory in `upstream/patches/` tracks any project-owned changes with removal conditions.
+- Required audits before production: webview-origin isolation (E12), remote-secret-storage plaintext fallback (E13), product.json/build overrides (E11), `--disable-getting-started-override` and branding deltas for U03.02.
+- Upgrade/rollback: candidate updates only via `versions.lock.json` change + full conformance re-run + emulator slice re-run; the previous pin stays usable until the new one passes.
+
+## Reopen triggers
+
+Physical-lane results contradicting this choice; code-server maintenance/policy change; upstream 1.14x incompatibility discovered in U03.01 control comparison; a Google platform constraint that favors the alternate patch model.
