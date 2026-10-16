@@ -1,0 +1,44 @@
+# Local credentials and release signing material
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+/local.properties
+/android/local.properties
+
+# Android / Gradle / Kotlin build output
+.gradle/
+.kotlin/
+.cxx/
+.externalNativeBuild/
+**/build/
+*.apk
+*.aab
+*.apks
+
+# Guest / extension build output and dependency caches
+**/target/
+**/node_modules/
+**/dist/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+*.vsix
+
+# Re-creatable upstream working copies; keep pins and patches tracked
+/upstream/checkouts/
+
+# Machine-local IDE metadata and temporary output
+.idea/
+.DS_Store
+*.swp
+*.swo
+*.log
+/tmp/
+
+# Private device evidence; publish only reviewed, redacted records
+/docs/evidence/private/
