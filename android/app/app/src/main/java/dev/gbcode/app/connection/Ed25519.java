@@ -9,7 +9,7 @@ import java.security.SecureRandom;
  * Deliberately boring and auditable: key generation from seed, sign, verify.
  * Performance is irrelevant here (a few signatures per pairing session).
  */
-final class Ed25519 {
+public final class Ed25519 {
     private static final BigInteger P = BigInteger.ONE.shiftLeft(255).subtract(BigInteger.valueOf(19));
     private static final BigInteger L = BigInteger.ONE.shiftLeft(252)
             .add(new BigInteger("27742317777372353535851937790883648493"));
@@ -102,9 +102,9 @@ final class Ed25519 {
         return new Point(x, y);
     }
 
-    static final class KeyPair {
-        final byte[] publicKey; // 32 bytes
-        final byte[] privateKey; // 32-byte seed
+    public static final class KeyPair {
+        public final byte[] publicKey; // 32 bytes
+        public final byte[] privateKey; // 32-byte seed
 
         KeyPair(byte[] publicKey, byte[] privateKey) {
             this.publicKey = publicKey;
@@ -112,13 +112,13 @@ final class Ed25519 {
         }
     }
 
-    static KeyPair generate() {
+    public static KeyPair generate() {
         byte[] seed = new byte[32];
         new SecureRandom().nextBytes(seed);
         return fromSeed(seed);
     }
 
-    static KeyPair fromSeed(byte[] seed) {
+    public static KeyPair fromSeed(byte[] seed) {
         byte[] h = sha512(seed);
         byte[] aBytes = h.clone();
         aBytes[0] &= (byte) 248;
@@ -129,7 +129,7 @@ final class Ed25519 {
         return new KeyPair(A.encode(), seed.clone());
     }
 
-    static byte[] sign(byte[] privateSeed, byte[] publicKey, byte[] message) {
+    public static byte[] sign(byte[] privateSeed, byte[] publicKey, byte[] message) {
         byte[] h = sha512(privateSeed);
         byte[] aBytes = h.clone();
         aBytes[0] &= (byte) 248;
@@ -152,7 +152,7 @@ final class Ed25519 {
     }
 
     /** Verify an RFC 8032 signature (used by tests; the daemon verifies too). */
-    static boolean verify(byte[] publicKey, byte[] signature, byte[] message) {
+    public static boolean verify(byte[] publicKey, byte[] signature, byte[] message) {
         if (signature.length != 64) return false;
         byte[] rEnc = java.util.Arrays.copyOf(signature, 32);
         BigInteger S = littleEndianToInt(java.util.Arrays.copyOfRange(signature, 32, 64));

@@ -75,8 +75,11 @@ class OnboardingActivity : Activity() {
         setContentView(root)
 
         app.addStateListener { state -> log("state: $state") }
-        if (app.connectionState == ConnectionState.CONNECTED) {
+        if (app.connectionState == ConnectionState.CONNECTED || app.restoreFromPersisted()) {
+            app.setState(ConnectionState.CONNECTED)
+            log("restored pairing (fingerprint ${app.serverFingerprint})")
             openWorkbench()
+            return
         }
     }
 
@@ -100,6 +103,14 @@ class OnboardingActivity : Activity() {
                 runOnUiThread {
                     app.setState(ConnectionState.PAIRED, fingerprint)
                     app.backendBaseUrl = workbenchBase
+                    val seedHex = client.keyPair.privateKey.joinToString("") { "%02x".format(it) }
+                    app.savePairedState(GbCodeApp.PairedState(
+                        seedHex = seedHex,
+                        appHash = result.getString("enrolledApp"),
+                        daemonBase = daemonBase,
+                        workbenchBase = workbenchBase,
+                        fingerprint = fingerprint,
+                    ))
                     app.setState(ConnectionState.CONNECTED)
                     log("paired; server fingerprint:\n$fingerprint")
                     openWorkbench()

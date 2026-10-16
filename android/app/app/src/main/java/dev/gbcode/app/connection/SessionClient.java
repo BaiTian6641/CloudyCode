@@ -24,13 +24,24 @@ public final class SessionClient {
         this.keyPair = Ed25519.generate();
     }
 
+    /** Reconnect with a previously enrolled identity. */
+    public SessionClient(String base, Ed25519.KeyPair enrolledKeyPair) {
+        this.base = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+        this.keyPair = enrolledKeyPair;
+    }
+
+    /** The enrolled app identity (persist seed via Keystore in production). */
+    public Ed25519.KeyPair getKeyPair() {
+        return keyPair;
+    }
+
     /** Pair once; returns the enrolled app hash. */
     public String pair(String pairingSecret, String nonce) throws Exception {
         JSONObject resp = call("POST", "/pair", new JSONObject()
                 .put("v", 1)
                 .put("pairingSecret", pairingSecret)
                 .put("appPublicKey", b64u(keyPair.publicKey))
-                .put("appLabel", "gbcode-slice")
+                .put("appLabel", "gbcode-app")
                 .put("nonce", nonce), null);
         if (resp.getInt("__status") != 200) {
             throw new IllegalStateException("pair failed: " + resp);

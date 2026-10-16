@@ -49,13 +49,34 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
     }
 
     private fun handle(client: Socket) {
-        var upstream: Socket? = null
         try {
             client.tcpNoDelay = true
-            val request = readHttpHead(client.getInputStream()) ?: return
+            client.soTimeout = 120_000
+            // HTTP/1.1 keep-alive: sequential requests per connection until the
+            // client closes, an upgrade takes over, or the idle timeout fires.
+            while (!client.isClosed) {
+                val request = try {
+                    readHttpHead(client.getInputStream())
+                } catch (e: java.net.SocketTimeoutException) {
+                    return
+                } ?: return
+                if (!handleOne(client, request)) return
+            }
+        } catch (e: IOException) {
+            android.util.Log.w(TAG, "request failed", e)
+        } finally {
+            closeQuietly(client)
+            sockets.remove(client)
+        }
+    }
+
+    /** Serves one request; returns false when the client connection must close. */
+    private fun handleOne(client: Socket, request: ByteArray): Boolean {
+        var upstream: Socket? = null
+        try {
             val headText = String(request, Charsets.ISO_8859_1)
             val headEnd = headText.indexOf("\r\n\r\n")
-            if (headEnd < 0) return
+            if (headEnd < 0) return false
             val head = headText.substring(0, headEnd + 4)
             val requestLine = head.substringBefore("\r\n")
             val headers = parseHeaders(head)
@@ -68,6 +89,7 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
 
             val isUpgrade = headers["connection"]?.contains("upgrade", true) == true &&
                     headers.containsKey("sec-websocket-key")
+            val clientWantsClose = headers["connection"]?.contains("close", true) == true
             val rewritten = StringBuilder()
             rewritten.append(requestLine).append("\r\n")
             for ((key, value) in headers) {
@@ -76,10 +98,6 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
                     "host" -> "$upstreamHost:$upstreamPort"
                     "origin" -> "http://$upstreamHost:$upstreamPort"
                     "referer" -> "http://$upstreamHost:$upstreamPort/"
-                    // One request per connection: the browser learns from the
-                    // rewritten Connection header and opens a fresh connection
-                    // per resource. (Keep-alive pipelining is S04 work.)
-                    "connection" -> if (isUpgrade) value else "close"
                     else -> value
                 }
                 rewritten.append(key).append(": ").append(v).append("\r\n")
@@ -91,7 +109,8 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
             out.flush()
 
             if (isUpgrade) {
-                // WebSocket: pipe both ways until either side closes.
+                // WebSocket: pipe both ways until either side closes; this
+                // connection is consumed and never reused for HTTP.
                 val t = Thread {
                     try {
                         pump(upstream.getInputStream(), client.getOutputStream())
@@ -110,19 +129,18 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
                     closeQuietly(client)
                     closeQuietly(upstream)
                 }
-            } else {
-                // Plain HTTP: stream the response, then close (Connection: close
-                // above makes the upstream close after the response body).
-                pump(upstream.getInputStream(), client.getOutputStream())
-                closeQuietly(upstream)
-                closeQuietly(client)
+                return false
             }
+
+            // Plain HTTP: stream exactly content-length or until close.
+            val complete = pumpResponse(upstream.getInputStream(), client.getOutputStream())
+            closeQuietly(upstream)
+            return complete && !clientWantsClose
         } catch (e: IOException) {
             android.util.Log.w(TAG, "request failed", e)
             closeQuietly(client)
             closeQuietly(upstream)
-        } finally {
-            sockets.remove(client)
+            return false
         }
     }
 
@@ -134,6 +152,48 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
             output.write(buf, 0, n)
             output.flush()
         }
+    }
+
+    /**
+     * Streams one upstream response to the client with correct framing.
+     * Returns true only when the response completed cleanly AND the upstream
+     * kept its side open (safe to read another request from the client).
+     */
+    private fun pumpResponse(upstreamIn: InputStream, clientOut: OutputStream): Boolean {
+        val head = readHttpHead(upstreamIn) ?: return false
+        clientOut.write(head)
+        val headText = String(head, Charsets.ISO_8859_1)
+        val statusLine = headText.substringBefore("\r\n")
+        val parts = statusLine.split(" ")
+        val code = parts.getOrNull(1)?.toIntOrNull() ?: return false
+        val headers = parseHeaders(headText)
+
+        if (code in 100..199 || code == 204 || code == 304) return true
+        val contentLength = headers.entries.firstOrNull { it.key.equals("content-length", true) }
+            ?.value?.trim()?.toLongOrNull()
+        if (contentLength != null) {
+            var remaining = contentLength
+            val buf = ByteArray(64 * 1024)
+            while (remaining > 0) {
+                val n = upstreamIn.read(buf, 0, minOf(buf.size.toLong(), remaining).toInt())
+                if (n < 0) return false
+                clientOut.write(buf, 0, n)
+                remaining -= n
+            }
+            clientOut.flush()
+            // Upstream keep-alive survives; the connection is reusable.
+            return !headers.entries.any { it.key.equals("connection", true) && it.value.contains("close", true) }
+        }
+        val chunked = headers.entries.any {
+            it.key.equals("transfer-encoding", true) && it.value.contains("chunked", true)
+        }
+        if (chunked) {
+            pump(upstreamIn, clientOut) // read to close; do not reuse
+            return false
+        }
+        // Close-delimited body.
+        pump(upstreamIn, clientOut)
+        return false
     }
 
     private fun readHttpHead(input: InputStream): ByteArray? {
