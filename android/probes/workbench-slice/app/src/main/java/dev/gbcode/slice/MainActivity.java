@@ -219,8 +219,10 @@ public final class MainActivity extends Activity {
                 actionDispatched = true;
                 webView.postDelayed(() -> {
                     String feed = "(() => {"
-                            + "const tas=[...document.querySelectorAll('.terminal.active .xterm-helper-textarea, .xterm-helper-textarea')];"
-                            + "const ta=tas[tas.length-1];"
+                            + "const all=[...document.querySelectorAll('.xterm-helper-textarea')];"
+                            + "const visible=all.filter(e=>e.offsetParent!==null);"
+                            + "const ta=visible[visible.length-1]||all[all.length-1];"
+                            + "if(!ta) return 'no-xterm-textarea visible='+visible.length+' all='+all.length;"
                             + "ta.focus();"
                             + "const cmd='echo GBCODE_SLICE_WEBVIEW_OK > /tmp/gbcode-slice-user.txt';"
                             + "ta.value=cmd;"
@@ -228,8 +230,20 @@ public final class MainActivity extends Activity {
                             + "ta.value='';"
                             + "const kd=new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true});"
                             + "ta.dispatchEvent(kd);"
-                            + "return 'fed+enter';})()";
+                            + "return 'fed+enter visible='+visible.length+' all='+all.length;})()";
                     evaluate(feed, "feed-cmd");
+                }, 3000);
+                break;
+            case "trust":
+                actionDispatched = true;
+                webView.postDelayed(() -> {
+                    String click = "(() => {"
+                            + "const btns=[...document.querySelectorAll('.monaco-dialog-box .monaco-button, .monaco-button')];"
+                            + "const t=btns.find(b=>/Trust Folder/i.test(b.textContent));"
+                            + "if(t){t.click();return 'trusted';}"
+                            + "const manage=btns.map(b=>b.textContent.trim()).join('|').slice(0,120);"
+                            + "return 'no-trust-button:'+manage;})()";
+                    evaluate(click, "trust-click");
                 }, 3000);
                 break;
             case "cc":

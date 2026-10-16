@@ -10,17 +10,11 @@
 | Management WebSocket stability | PASS — two concurrent WS (management + extension-host channel) lived 283s/314s, closed only by client reload |
 | code-server Origin check | FOUND+FIXED — code-server 403s WS upgrades whose `Origin` ≠ its host; gateway rewrites `Origin`/`Referer` to upstream (test 5) |
 | Conformance extension webview through proxy | PASS (`webviews:2`, title "GBCode Conformance") |
-| **Terminal creation + command through gateway** | **OPEN ISSUE** — management WS fine but no new pty appears in `ptyhost.log`; same flow direct to :8080 works (mark `GBCODE_SLICE_WEBVIEW_OK` written 04:47) |
+| **Terminal creation + command through gateway** | **PASS after trust acceptance** — root cause was per-origin Workspace Trust (see below), not transport |
 
-## Open issue: terminal path through gateway
+## Resolved: terminal path was per-origin Workspace Trust
 
-- Symptom: menuterm "New Terminal" click succeeds in the browser, but no persistent-process entry appears in `ptyhost.log` (direct connection creates one immediately; the direct path then executes the fed command).
-- Ruled out: gateway WS stability (connections live minutes), code-server state (direct works at the same time), the feed mechanism (works direct and works on pristine control).
-- Next hypotheses: (1) permessage-deflate negotiation subtlety on the management channel — VS Code's protocol may tolerate direct compressed frames differently through a pipe; (2) the pty-lifecycle roundtrip needs the extension-host channel, whose reconnect/exit timing through the gateway differs (extension host process exited code 0 shortly after a proxied reconnect); (3) pty socket path resolution via `remoteAuthority` differing when proxied (logs show `remoteAuthority=127.0.0.1:8083` — correct for the gateway origin).
-- **Impact:** none on the production design yet — S02.03's production gateway is an APK-owned loopback component; this prototype is Node-side proof. The issue must be resolved (or the terminal path re-verified) before S09.02 production cutover, and re-verified on the physical lane.
-
-## Production implications validated here
-
-- App-local gateway on loopback is a viable secure-context topology (matches emulator secure-context evidence: `127.0.0.1` origins get `isSecureContext=true`).
-- Upstream credential isolation is feasible (gateway terminates client TLS/HTTP and holds upstream auth — not yet implemented beyond password-cookie passthrough).
-- Origin rewriting must be scoped to the pre-approved upstream only (implemented via `rewriteOrigin` option, default on for the fixed upstream).
+- Investigation eliminated: gateway WS stability (multi-minute connections), code-server state (direct worked concurrently), ptyhost.log as a signal (empty even on direct success — not a reliable creation indicator), textarea targeting (visible/active selection verified).
+- Decisive evidence: screencap showed the "Creating a terminal process requires executing code" trust dialog blocking the spawn. `xterm` count still incremented (UI tab is allowed in Restricted Mode), which had masked the spawn block.
+- **Production implication (S02.03/S03.01/S09):** trust state is per-origin. The production gateway is a stable loopback origin, so trust is accepted once per workspace — but onboarding must surface the trust step (native or workbench dialog) before terminal/debug/task creation, and per-origin isolation means other origins never inherit the gateway's trust. The slice `trust` action (DOM click on "Trust Folder") proves the flow; the production UX will use the workbench's own trust UI.
+- Also resolved alongside: the earlier "1–2ms upstream close" reconnect storm was code-server's Origin check (fixed by scoped origin rewrite), and dead restored terminals stealing the feed (fixed by visible-textarea targeting).
