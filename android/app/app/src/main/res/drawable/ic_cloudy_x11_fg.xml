@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Display outline -->
+    <path android:strokeColor="#006A6A" android:strokeWidth="4"
+        android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M30,30 h48 a4,4 0 0 1 4,4 v30 a4,4 0 0 1 -4,4 h-48 a4,4 0 0 1 -4,-4 v-30 a4,4 0 0 1 4,-4 z" />
+    <!-- Stand -->
+    <path android:strokeColor="#006A6A" android:strokeWidth="4"
+        android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M44,76 h20 M54,68 v8" />
+    <!-- Code brackets -->
+    <path android:strokeColor="#006A6A" android:strokeWidth="3.2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M47,42 L40,49 L47,56" />
+    <path android:strokeColor="#006A6A" android:strokeWidth="3.2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M61,42 L68,49 L61,56" />
+    <path android:strokeColor="#006A6A" android:strokeWidth="3.2"
+        android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M57,40 L51,58" />
+</vector>
