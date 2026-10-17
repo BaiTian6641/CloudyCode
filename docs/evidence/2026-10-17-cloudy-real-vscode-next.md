@@ -187,6 +187,21 @@ The VM reported `usbip: command not found`: the running setup predates the usbip
 
 This distinguishes: missing `kmod` (fixable), missing module files, and a kernel built without `vhci_hcd` (transparent USB impossible; serial lane only).
 
+## Decisive finding: the Terminal app provides native USB passthrough (2026-10-17)
+
+The GMSC Terminal APK (`com.android.virtualization.terminal`, decompiled) contains a real USB passthrough path:
+
+- `VmController.attachAllUsbDevices(vm)` runs when the VM starts;
+- a hotplug receiver listens for `USB_DEVICE_ATTACHED`/`DETACHED`, checks a denylist (no allowlist files present on this device), requests the per-device USB permission, then `vm.attachUsbDevice(UsbDeviceConnection)`; logs under tag `VmTerminalApp` ("USB Device Attached", "Attaching USB device");
+- no vhci/usbip involved: the VM receives the USB device directly.
+
+Consequences:
+
+1. **No `vhci_hcd` exists in this VM kernel** (`/sys/devices/platform/vhci_hcd*` missing; no kernel messages), so the USB/IP lane cannot work here regardless of tools.
+2. Our app's USB/IP exporter (and serial bridge) **claim the device**, which blocks the Terminal app's attach — this is why the board never appeared in the VM while our forwarding was active.
+3. The app no longer auto-starts the USB/IP exporter when the Googlebook Terminal app is installed; the native passthrough owns the device. The manual USB screen remains for other environments.
+4. Remaining user-side step: replug the board (or restart the Terminal VM) with the app stopped so the Terminal app runs its attach flow, and accept its USB permission dialog. The device should then appear as `/dev/ttyACM*` (no usbip, no modprobe needed). The guest `cloudy-usbip-attach` unit is obsolete and can be disabled.
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).

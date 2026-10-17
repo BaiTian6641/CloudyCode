@@ -360,6 +360,11 @@ class WorkbenchActivity : Activity() {
     /** Keep the USB/IP exporter running while the device is present. */
     private fun maybeStartUsbForwarding() {
         try {
+            // Googlebook: the Terminal app owns USB passthrough into the Linux
+            // VM. Our USB/IP exporter claims the device and would block that
+            // attach, so never auto-start it when the Terminal app exists.
+            if (packageManager.getLaunchIntentForPackage(
+                    "com.android.virtualization.terminal") != null) return
             if (dev.gbcode.app.SerialBridgeService.state == "connected") return
             val usb = getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager
             val device = usb.deviceList.values.firstOrNull { it.vendorId == 0x303A } ?: return
