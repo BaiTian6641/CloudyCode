@@ -200,7 +200,9 @@ class X11AppsActivity : Activity() {
         status.text = "Starting…"
         io.execute {
             try {
+                val (width, height) = windowSize()
                 val payload = JSONObject().put("app", app)
+                    .put("width", width).put("height", height)
                 if (command != null) payload.put("command", command)
                 val result = post("/start", payload.toString())
                 val port = result.getInt("port")
@@ -242,6 +244,12 @@ class X11AppsActivity : Activity() {
         return JSONObject(text)
     }
 
+    private fun windowSize(): Pair<Int, Int> {
+        val dm = resources.displayMetrics
+        return Pair((dm.widthPixels * 0.72f).toInt(),
+            (dm.heightPixels * 0.78f).toInt())
+    }
+
     private fun launchViewer(port: Int, sid: String?, name: String, setup: Boolean) {
         val intent = Intent(this, X11Activity::class.java).apply {
             putExtra("port", port)
@@ -253,8 +261,7 @@ class X11AppsActivity : Activity() {
                 Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
         }
         val dm = resources.displayMetrics
-        val w = (dm.widthPixels * 0.72f).toInt()
-        val h = (dm.heightPixels * 0.78f).toInt()
+        val (w, h) = windowSize()
         val x = (dm.widthPixels - w) / 2
         val y = (dm.heightPixels - h) / 2
         val opts = ActivityOptions.makeBasic()

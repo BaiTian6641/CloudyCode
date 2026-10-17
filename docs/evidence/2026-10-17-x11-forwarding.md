@@ -128,6 +128,37 @@ Verified on the Googlebook: Firefox on proxy `14510` and xterm on `14511`
 running concurrently in two tasks; both windows contain only the app on black;
 no soft keyboard; typing works; per-window close cleans up the session.
 
+
+### Physical viewport and window fitting (2026-10-17 revision)
+
+The HTML5 client was laying out at the WebView's **CSS** width (about 800 px)
+while the freeform window was ~1400 physical px. xpra consequently shrank the
+X screen to the CSS size and the browser letterboxed it: black margins and
+tiny text.
+
+Fixes now in place:
+
+- The viewer adds `cloudy_w=<physical width>` (plus `override_width`); the token
+  proxy rewrites the xpra HTML5 client's viewport meta to that width, so the
+  X screen is the physical window size, not the CSS size.
+- The WebView reloads when its layout width changes (verified: `1398` -> `1900`
+  after `am task resize`), so the X screen follows the Android window.
+- A daemon-side fit thread (`xdotool`, top-level largest visible window)
+  sizes the app window to the virtual screen; per-app sessions run **seamless**
+  (no desktop WM frame) and the xterm preset uses a 13pt Xft font.
+- Verified: a fresh terminal session fills its Cloudy X11 window with readable
+  text (no wallpaper, keyboard, or desktop margins).
+
+Remaining limit: after resizing the Android window, the X screen reloads and
+resizes, but the app's own top-level window still does not reflow to the new
+screen size, so black margins can remain. The xpra HTML5 canvas plus a virtual
+X screen does not expose native X11 window-configure semantics. True
+OS-window/app-window size coupling (the MobaXterm model) requires a native
+X11 server/client that creates one Android window per X top-level and forwards
+resize events both ways; the WebView/xpra model can only approximate it.
+Workaround: reopen the session after a resize (or add a "Fit" action) so the
+app starts at the new screen size.
+
 ## Limits
 
 - One Android window hosting all X windows (xpra seamless UI), not one OS window per X top-level.

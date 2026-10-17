@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import http.client
 import os
+import re
 import select
 import socket
 import sys
@@ -100,7 +101,8 @@ class Handler(BaseHTTPRequestHandler):
         headers = {}
         for k, v in self.headers.items():
             lk = k.lower()
-            if lk in ("host", "connection", "cookie", "content-length"):
+            if lk in ("host", "connection", "cookie", "content-length",
+                      "accept-encoding"):
                 continue
             headers[k] = v
         if body is not None:
@@ -111,6 +113,26 @@ class Handler(BaseHTTPRequestHandler):
             conn.request(self.command, self.path, body=body, headers=headers)
             resp = conn.getresponse()
             data = resp.read()
+            # The HTML5 client uses a CSS viewport (device-width) which is
+            # smaller than the WebView's physical pixels on high-DPI screens:
+            # xpra then shrinks the X screen to that CSS size and the browser
+            # letterboxes it (black margins, tiny text). Pin the client
+            # viewport to the physical width supplied by the app.
+            try:
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                w = int(q.get("cloudy_w", ["0"])[0])
+                ctype = (resp.getheader("Content-Type") or "").lower()
+                if 320 <= w <= 8192 and "text/html" in ctype:
+                    html = data.decode("utf-8", "replace")
+                    meta = f'<meta name="viewport" content="width={w}, initial-scale=1" />'
+                    html, n = re.subn(
+                        r'<meta\s+name="viewport"[^>]*>', meta, html,
+                        count=1, flags=re.I)
+                    if n == 0:
+                        html = html.replace("<head>", "<head>" + meta, 1)
+                    data = html.encode("utf-8")
+            except Exception as e:
+                self.log_message("viewport rewrite skipped: %s", e)
         except Exception as e:
             self.log_message("upstream error: %s", e)
             body = b"xpra upstream unavailable\n"

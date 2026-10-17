@@ -2,6 +2,7 @@ package dev.gbcode.app.ui
 
 import android.app.Activity
 import android.app.ActivityManager
+import android.content.res.Configuration
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -63,6 +64,25 @@ class X11Activity : Activity() {
     private val sessionName: String? by lazy { intent.getStringExtra("name") }
     private val forceSetup: Boolean by lazy { intent.getBooleanExtra("setup", false) }
     private val origin: String by lazy { "http://$HOST:$port" }
+    private var lastWidth = 0
+    private fun scheduleReload() {
+        if (!loaded || sessionId == null) return
+        handler.removeCallbacks(reloadRunnable)
+        handler.postDelayed(reloadRunnable, 500)
+    }
+
+    private val reloadRunnable = Runnable {
+        if (!loaded || sessionId == null) return@Runnable
+        val w = if (webView.width > 0) webView.width
+            else getSystemService(WindowManager::class.java).currentWindowMetrics.bounds.width()
+        if (w != lastWidth) {
+            loaded = false
+            webView.stopLoading()
+            webView.settings.blockNetworkLoads = true
+            handler.removeCallbacks(probeRunnable)
+            handler.post(probeRunnable)
+        }
+    }
 
     private val token: String
         get() = (application as GbCodeApp).x11Token()
@@ -82,6 +102,9 @@ class X11Activity : Activity() {
         }
         setupView = buildSetup()
         webView = WebView(this)
+        webView.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ ->
+            if (loaded && r - l != or - ol && r - l > 0) scheduleReload()
+        }
         profileReady = applyIsolatedProfile(webView)
         webView.apply {
             visibility = View.GONE
@@ -244,7 +267,15 @@ class X11Activity : Activity() {
                             webView.visibility = View.VISIBLE
                             webView.settings.blockNetworkLoads = false
                             webView.requestFocus()
-                            webView.loadUrl("$origin/?floating_menu=no&autohide=yes&border=no&video=no&encoding=png")
+                            val bounds = getSystemService(WindowManager::class.java)
+                                .currentWindowMetrics.bounds
+                            val width = if (webView.width > 0) webView.width else bounds.width()
+                            lastWidth = width
+                            val override = if (sessionId != null)
+                                "&override_width=$width&cloudy_w=$width" else ""
+                            Log.d(TAG, "load port=$port width=$width")
+                            webView.loadUrl("$origin/?floating_menu=no&autohide=yes" +
+                                "&border=no&video=no&encoding=png$override")
                             loaded = true
                         }
                     } else {
@@ -275,6 +306,7 @@ class X11Activity : Activity() {
         conn.connectTimeout = 1500
         conn.readTimeout = 1500
         if (conn.responseCode != 200) {
+            Log.w(TAG, "auth port=$port HTTP ${conn.responseCode}")
             conn.disconnect()
             Auth.BAD_RESPONSE
         } else {
@@ -284,14 +316,17 @@ class X11Activity : Activity() {
             mac.init(SecretKeySpec(token.toByteArray(Charsets.UTF_8), "HmacSHA256"))
             val expected = mac.doFinal(nonce.toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
-            if (MessageDigest.isEqual(body.toByteArray(Charsets.UTF_8), expected.toByteArray(Charsets.UTF_8)))
-                Auth.OK else Auth.MISMATCH
+            val ok = MessageDigest.isEqual(
+                body.toByteArray(Charsets.UTF_8), expected.toByteArray(Charsets.UTF_8))
+            Log.d(TAG, "auth port=$port ok=$ok bodyLen=${body.length}")
+            if (ok) Auth.OK else Auth.MISMATCH
         }
     } catch (e: java.net.SocketTimeoutException) {
         Auth.UNREACHABLE
     } catch (e: java.net.ConnectException) {
         Auth.UNREACHABLE
     } catch (e: Exception) {
+        Log.w(TAG, "auth port=$port failed: ${e.javaClass.simpleName}: ${e.message}")
         Auth.UNREACHABLE
     }
 
@@ -394,6 +429,11 @@ class X11Activity : Activity() {
             getSystemService(InputMethodManager::class.java)
                 .hideSoftInputFromWindow(webView.windowToken, 0)
         }, 500)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        scheduleReload()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
