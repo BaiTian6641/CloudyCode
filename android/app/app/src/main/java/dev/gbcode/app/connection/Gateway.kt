@@ -164,7 +164,15 @@ class Gateway @JvmOverloads constructor(
 
             upstream = Socket()
             upstream.tcpNoDelay = true
-            upstream.connect(InetSocketAddress(upstreamHost, upstreamPort), 10_000)
+            try {
+                upstream.connect(InetSocketAddress(upstreamHost, upstreamPort), 10_000)
+            } catch (e: IOException) {
+                // Answer instead of closing: an empty response makes the
+                // WebView show its own error page instead of the app's
+                // reconnect surface.
+                closeQuietly(upstream)
+                return reject(client, 502, "Backend unavailable")
+            }
             val out = upstream.getOutputStream()
 
             val clientWantsClose = headers["connection"]?.contains("close", true) == true

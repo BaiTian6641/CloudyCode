@@ -121,6 +121,32 @@ Shell redesign per `docs/04-design` (Carbon structure + M3 tonal clarity):
 
 **First real-VM end-to-end success**: on the HP Googlebook 14 the Terminal app forwards the Linux VM's port; with the user's code-server 4.141.0 running in the VM (installed by the setup command), `127.0.0.1:8080` appeared on Android and the app connected automatically with no further steps. The workbench rendered the real VM code-server (Explorer, Welcome, status bar); the window caption shows "Cloudy Code" and the new icon. Evidence: `cloudy-startup.png`, `cloudy-advanced-setup.png`, `cloudy-workbench-real-vm.png`.
 
+## Connection surfaces: reconnecting and "Linux workspace not detected" (2026-10-17)
+
+The Terminal app owns the VM port bridge. When it is closed the forwarded port disappears and the frontend silently lost its backend; a reload showed the WebView's own error page (empty response), which is unacceptable.
+
+Fixes:
+
+1. **Gateway answers failures**: when the loopback upstream cannot be reached, the gateway now returns `502 Backend unavailable` instead of closing the client (the close produced `ERR_EMPTY_RESPONSE`).
+2. **WebView errors intercepted**: main-frame `onReceivedError`/`onReceivedHttpError` (5xx) stop the load, blank to `about:blank`, and hand over to the native surface — the engine's error page is never committed.
+3. **Cloudy connection surface** (`ConnectionOverlay`):
+   - Probe the loopback upstream every 3 s (1.5 s while shown); two consecutive failures show **Reconnecting…** with a thin indeterminate progress line, status copy and a "Show options" link; 15 s of sustained failure switches to **Linux workspace not detected** with the explanation (keep the Terminal app running; reopen it; if the VM restarted, run the setup command) and actions: Retry now (filled teal), Open Terminal (outline), Copy setup command / Advanced setup / Continue offline (text).
+   - Recovery hides the surface; if the page had been blanked it reloads the backend page (the editor restores from its own persisted state).
+   - Entry motion is a 180 ms fade + 8 dp rise (skipped when animations are disabled); nothing loops except the progress line, which carries its status in text.
+4. **Startup copy** now states the Terminal dependency, and "Continue offline" clears the backend state so it opens the packaged workbench instead of retrying a dead port.
+
+Verified on the emulator with a real code-server exposed via `adb reverse` (controllable backend):
+
+| Scenario | Result |
+|---|---|
+| Backend disappears while the workbench is open | Reconnecting surface after ~2 probes (`cloudy-reconnecting.png`) |
+| Sustained outage (>15 s) | Not-detected surface with all recovery actions (`cloudy-not-detected.png`) |
+| Reload while the backend is down | Native surface, no engine error page (`cloudy-error-intercepted.png`) |
+| Backend returns | Surface hides and the workbench reloads in ~6 s |
+| Real Googlebook, Terminal app closed | Forwarded port gone; startup shows the setup state with the Terminal-keep-running note (`cloudy-device-setup-state.png`) |
+
+Limitation (platform): the port bridge belongs to the Terminal app, so keeping it running is required for now; reopening it plus the setup command restores service. A preinstalled build can start the VM/command itself; long-term service persistence is a follow-up.
+
 ## Tests
 
 `tools/verify.sh` → ALL GREEN. sessiond 27/27; gateway 5/5; instrumented 47/47 (emulator only), including `WebAssetGatewayTest` with the renderer's new parameters.

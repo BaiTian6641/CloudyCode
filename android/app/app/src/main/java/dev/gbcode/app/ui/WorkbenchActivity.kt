@@ -4,6 +4,15 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.os.Bundle
 import android.view.ViewGroup
+import android.content.ClipData
+import android.content.Intent
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -12,6 +21,9 @@ import dev.gbcode.app.BuildConfig
 import dev.gbcode.app.GbCodeApp
 import dev.gbcode.app.bridge.NativeBridge
 import dev.gbcode.app.connection.Gateway
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.util.concurrent.Executors
 
 /**
  * The workbench host: starts the app-local gateway to the paired backend and
@@ -22,6 +34,22 @@ class WorkbenchActivity : Activity() {
     private var gateway: Gateway? = null
     private var webView: WebView? = null
     private var bridge: NativeBridge? = null
+    private var overlay: ConnectionOverlay? = null
+
+    // Backend health: probe the loopback upstream directly (the gateway may
+    // still answer from packaged assets in installed-frontend mode).
+    private var probeHost: String? = null
+    private var probePort = 0
+    private val monitor = Handler(Looper.getMainLooper())
+    private val probeExec = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "cloudy-backend-monitor").apply { isDaemon = true }
+    }
+    private var monitorRunning = false
+    private var probeInFlight = false
+    private var failures = 0
+    private var downSince = 0L
+    private var pageErrored = false
+    private var origin: String? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,6 +82,8 @@ class WorkbenchActivity : Activity() {
             }
             upstreamHost = host
             upstreamPort = port
+            probeHost = host
+            probePort = port
         }
 
         // ADR-0006: only the installed-frontend + pristine reh-web guest sets a
@@ -96,6 +126,7 @@ class WorkbenchActivity : Activity() {
             }.also { it.start(PREFERRED_GATEWAY_PORT) }
         }
         val origin = "http://127.0.0.1:${gateway!!.port}"
+        this.origin = origin
 
         if (BuildConfig.DEBUG) {
             // Debug-only: allow CDP inspection of the workbench WebView for
@@ -118,12 +149,41 @@ class WorkbenchActivity : Activity() {
             override fun onPageFinished(view: WebView, url: String) {
                 android.util.Log.i("GBCodeWorkbench", "page finished: $url")
             }
+
+            override fun onReceivedError(view: WebView, request: WebResourceRequest,
+                                         error: WebResourceError) {
+                if (!request.isForMainFrame) return
+                // Never show the engine's error page (it exposes an empty
+                // response and breaks the shell). Blank it and hand over to
+                // the Cloudy connection surface.
+                pageErrored = true
+                view.stopLoading()
+                view.loadUrl("about:blank")
+                onBackendLost(immediate = true)
+            }
+
+            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest,
+                                             errorResponse: WebResourceResponse) {
+                if (!request.isForMainFrame) return
+                if (errorResponse.statusCode < 500) return
+                pageErrored = true
+                view.stopLoading()
+                view.loadUrl("about:blank")
+                onBackendLost(immediate = true)
+            }
         }
 
         val root = FrameLayout(this)
         root.addView(webView, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setContentView(root)
+        overlay = ConnectionOverlay(this, root).apply {
+            onRetry = { retryNow() }
+            onOpenTerminal = { openTerminalApp() }
+            onCopyCommand = { copySetupCommand() }
+            onAdvanced = { startActivity(Intent(this@WorkbenchActivity, OnboardingActivity::class.java)) }
+            onOffline = { openOfflineWorkbench() }
+        }
 
         // The backend credential stays native: we log in through the gateway
         // from app code and hand the WebView only the session cookie(s).
@@ -142,6 +202,126 @@ class WorkbenchActivity : Activity() {
             }.start()
         } else {
             webView!!.loadUrl("$origin/")
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        startMonitor()
+    }
+
+    override fun onPause() {
+        monitorRunning = false
+        monitor.removeCallbacks(monitorRunnable)
+        super.onPause()
+    }
+
+    private fun startMonitor() {
+        if (probeHost == null || probePort <= 0) return
+        if (monitorRunning) return
+        monitorRunning = true
+        monitor.postDelayed(monitorRunnable, 2500)
+    }
+
+    private val monitorRunnable: Runnable = object : Runnable {
+        override fun run() {
+            if (!monitorRunning) return
+            val host = probeHost ?: return
+            if (probeInFlight) {
+                monitor.postDelayed(monitorRunnable, 800)
+                return
+            }
+            probeInFlight = true
+            probeExec.execute {
+                val up = portOpen(host, probePort)
+                runOnUiThread {
+                    probeInFlight = false
+                    if (!monitorRunning) return@runOnUiThread
+                    if (up) onBackendUp() else onBackendDown()
+                    monitor.postDelayed(monitorRunnable, if (overlay?.isVisible == true) 1500 else 3000)
+                }
+            }
+        }
+    }
+
+    private fun onBackendDown() {
+        failures++
+        if (failures < 2) return
+        if (downSince == 0L) downSince = System.currentTimeMillis()
+        val elapsed = System.currentTimeMillis() - downSince
+        if (elapsed >= UNAVAILABLE_AFTER_MS) {
+            overlay?.showUnavailable(UNAVAILABLE_DETAIL)
+        } else {
+            overlay?.showReconnecting()
+        }
+    }
+
+    private fun onBackendUp() {
+        failures = 0
+        downSince = 0L
+        val o = overlay ?: return
+        if (!o.isVisible) return
+        o.hide()
+        if (pageErrored) {
+            pageErrored = false
+            origin?.let { webView?.loadUrl("$it/") }
+        }
+    }
+
+    /** Main-frame load failed (or the upstream vanished): show the surface now. */
+    private fun onBackendLost(immediate: Boolean) {
+        failures = maxOf(failures, if (immediate) 2 else 1)
+        if (downSince == 0L) downSince = System.currentTimeMillis()
+        overlay?.showReconnecting("The Linux workspace stopped answering. Retrying " +
+            "automatically.")
+        monitor.removeCallbacks(monitorRunnable)
+        if (monitorRunning) monitor.postDelayed(monitorRunnable, 400)
+    }
+
+    private fun retryNow() {
+        failures = 0
+        downSince = System.currentTimeMillis()
+        overlay?.showReconnecting("Retrying the connection…")
+        monitor.removeCallbacks(monitorRunnable)
+        if (monitorRunning) monitor.post(monitorRunnable)
+    }
+
+    private fun openTerminalApp() {
+        val launch = packageManager.getLaunchIntentForPackage("com.android.virtualization.terminal")
+        if (launch == null) {
+            overlay?.setDetail("The Googlebook Terminal app is not installed.")
+            return
+        }
+        overlay?.setDetail(
+            "Keep the Terminal app running: it provides the VM port bridge this window " +
+                "uses. The workspace reconnects automatically.")
+        try {
+            startActivity(launch)
+        } catch (e: Exception) {
+            overlay?.setDetail("Could not open the Terminal app: ${e.message}")
+        }
+    }
+
+    private fun copySetupCommand() {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Cloudy Code setup", GuestSetup.COMMAND))
+        overlay?.setDetail("Command copied. Run it in the Terminal if the server stopped.")
+    }
+
+    private fun openOfflineWorkbench() {
+        val app = application as GbCodeApp
+        app.backendBaseUrl = null
+        app.backendKind = "reh-web"
+        app.guestFolder = null
+        recreate()
+    }
+
+    private fun portOpen(host: String, port: Int): Boolean {
+        return try {
+            Socket().use { it.connect(InetSocketAddress(host, port), 800) }
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 
@@ -193,6 +373,9 @@ class WorkbenchActivity : Activity() {
     }
 
     override fun onDestroy() {
+        monitorRunning = false
+        monitor.removeCallbacks(monitorRunnable)
+        probeExec.shutdownNow()
         webView?.destroy()
         gateway?.close()
         super.onDestroy()
@@ -204,5 +387,12 @@ class WorkbenchActivity : Activity() {
         // process restarts; Gateway falls back to an ephemeral port (and logs it)
         // if another process already owns this one — it never routes through it.
         const val PREFERRED_GATEWAY_PORT = 41873
+
+        /** Sustained outage before recovery actions replace the progress state. */
+        const val UNAVAILABLE_AFTER_MS = 15_000L
+        const val UNAVAILABLE_DETAIL =
+            "The Linux workspace is not answering. The Terminal app provides the VM port " +
+                "bridge: keep it running (or reopen it). If the VM restarted, start the " +
+                "server again with the setup command, then retry."
     }
 }

@@ -79,6 +79,10 @@ class StartupActivity : Activity() {
             begin()
         }
         offline.setOnClickListener {
+            val app = application as GbCodeApp
+            app.backendBaseUrl = null
+            app.backendKind = "reh-web"
+            app.guestFolder = null
             startActivity(Intent(this, WorkbenchActivity::class.java))
             finish()
         }
@@ -158,8 +162,9 @@ class StartupActivity : Activity() {
         statusText.text = "One-time setup: start the Linux backend"
         detail.text = "Android lets only the preinstalled Terminal API run commands in the VM " +
             "(MANAGE_TERMINAL is signature|preinstalled). Copy the setup command and run it " +
-            "once in the Terminal. This screen keeps checking and continues by itself as " +
-            "soon as the server is available."
+            "once in the Terminal, then keep the Terminal app running: it provides the VM " +
+            "port bridge this window needs. This screen keeps checking and continues by " +
+            "itself as soon as the server is available."
         pollBoth.set(true)
         handler.postDelayed(setupPoll, 1500)
     }
