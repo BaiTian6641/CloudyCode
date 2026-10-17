@@ -27,25 +27,15 @@ class WorkbenchActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as GbCodeApp
-        val backend = app.backendBaseUrl
-        if (backend == null) {
-            finish() // not paired; onboarding owns this state
-            return
-        }
 
-        val upstream = java.net.URI(backend)
-        val scheme = upstream.scheme?.lowercase()
-        val upstreamHost = upstream.host ?: "127.0.0.1"
-        val upstreamPort = when {
-            upstream.port > 0 -> upstream.port
-            scheme == "https" -> 443
-            else -> 80
-        }
-        // Fail closed: only http loopback backends. A remote or https backend
-        // would put the login credential on a plaintext path or silently
-        // downgrade; that needs a reviewed design, not a guess (S02.03).
-        if (scheme != "http" || !Gateway.isLoopbackHost(upstreamHost)) {
-            val msg = "backend URL rejected: only http loopback backends are supported (got $backend)"
+        // ADR-0006: the workbench is app-owned. Core assets and bootstrap come
+        // from the APK; a paired backend only supplies the guest IDE services.
+        // Without a backend the installed workbench still starts (palette,
+        // settings, untitled editor) from packaged assets alone.
+        val webAssets = dev.gbcode.app.web.WebAssets(assets)
+        val template = webAssets.readText("out/vs/code/browser/workbench/workbench.html")
+        if (template == null) {
+            val msg = "packaged workbench assets missing (run tools/release/package-web-assets.sh)"
             android.util.Log.e("GBCodeWorkbench", msg)
             val errorView = android.widget.TextView(this)
             errorView.text = "GBCode: $msg"
@@ -54,7 +44,39 @@ class WorkbenchActivity : Activity() {
             return
         }
 
-        gateway = Gateway(upstreamHost, upstreamPort).also { it.start(PREFERRED_GATEWAY_PORT) }
+        var upstreamHost: String? = null
+        var upstreamPort = 0
+        val backend = app.backendBaseUrl
+        if (backend != null) {
+            val upstream = java.net.URI(backend)
+            val scheme = upstream.scheme?.lowercase()
+            val host = upstream.host ?: "127.0.0.1"
+            val port = when {
+                upstream.port > 0 -> upstream.port
+                scheme == "https" -> 443
+                else -> 80
+            }
+            // Fail closed: only http loopback backends. A remote or https backend
+            // would put the login credential on a plaintext path or silently
+            // downgrade; that needs a reviewed design, not a guess (S02.03).
+            if (scheme != "http" || !Gateway.isLoopbackHost(host)) {
+                val msg = "backend URL rejected: only http loopback backends are supported (got $backend)"
+                android.util.Log.e("GBCodeWorkbench", msg)
+                val errorView = android.widget.TextView(this)
+                errorView.text = "GBCode: $msg"
+                errorView.setPadding(48, 96, 48, 48)
+                setContentView(errorView)
+                return
+            }
+            upstreamHost = host
+            upstreamPort = port
+        }
+
+        gateway = Gateway(upstreamHost, upstreamPort, webAssets) { nonce ->
+            renderWorkbench(template, if (upstreamHost != null) {
+                "127.0.0.1:${gateway?.port ?: PREFERRED_GATEWAY_PORT}"
+            } else null, nonce)
+        }.also { it.start(PREFERRED_GATEWAY_PORT) }
         val origin = "http://127.0.0.1:${gateway!!.port}"
 
         if (BuildConfig.DEBUG) {
@@ -88,7 +110,7 @@ class WorkbenchActivity : Activity() {
         // The backend credential stays native: we log in through the gateway
         // from app code and hand the WebView only the session cookie(s).
         val password = app.backendPassword
-        if (password != null) {
+        if (password != null && upstreamHost != null) {
             Thread {
                 try {
                     val installed = nativeLogin(origin, password)
@@ -140,6 +162,15 @@ class WorkbenchActivity : Activity() {
         android.util.Log.i("GBCodeWorkbench", "native login HTTP $code, set-cookie=${cookies.size}, stored=$installed names=$names")
         return installed
     }
+    /**
+     * Render the upstream workbench template with the app configuration
+     * (`WorkbenchPage.renderWorkbench`, the client-side counterpart of the
+     * pinned commit's webClientServer.renderWorkbench).
+     */
+    private fun renderWorkbench(template: String, remoteAuthority: String?, nonce: String): String {
+        return dev.gbcode.app.web.WorkbenchPage.renderWorkbench(template, remoteAuthority, nonce)
+    }
+
     override fun onDestroy() {
         webView?.destroy()
         gateway?.close()

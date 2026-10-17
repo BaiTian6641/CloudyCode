@@ -72,6 +72,14 @@ class OnboardingActivity : Activity() {
         reconnectButton.isEnabled = app.loadPairedState() != null
         reconnectButton.setOnClickListener { authenticateRestored(app) }
 
+        // ADR-0006: the workbench is app-owned and starts from packaged assets
+        // with no guest and no network. Pairing only adds guest IDE services.
+        val offlineButton = Button(this)
+        offlineButton.text = "Open workbench (offline, no guest)"
+        offlineButton.setOnClickListener {
+            startActivity(Intent(this, WorkbenchActivity::class.java))
+        }
+
         logView = TextView(this)
         logView.setPadding(24, 16, 24, 16)
         val scroll = ScrollView(this)
@@ -87,6 +95,7 @@ class OnboardingActivity : Activity() {
         root.addView(passwordField)
         root.addView(pairButton)
         root.addView(reconnectButton)
+        root.addView(offlineButton)
         root.addView(scroll, LinearLayout.LayoutParams(
 
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))

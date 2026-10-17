@@ -29,6 +29,10 @@ local.properties
 *.py[cod]
 *.vsix
 
+# ADR-0006: generated web workbench assets (tools/release/package-web-assets.sh).
+# The generated manifest copy under android/app/asset-manifest/ is tracked.
+/android/app/app/src/main/assets/web/
+
 # Re-creatable upstream working copies; keep pins and patches tracked
 /upstream/checkouts/
 

@@ -1,5 +1,6 @@
 package dev.gbcode.app.connection
 
+import dev.gbcode.app.web.WebAssets
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -11,14 +12,20 @@ import java.util.concurrent.Executors
 
 /**
  * App-local loopback origin gateway (production form of guest/gateway):
- * the WebView talks to 127.0.0.1:<gatewayPort>; the gateway forwards to the
- * single approved backend upstream. This keeps the backend credential out of
- * page JavaScript and stabilizes the browser origin.
+ * the WebView talks to 127.0.0.1:<gatewayPort>; the gateway serves the
+ * app-owned core workbench assets (ADR-0006 class A) and forwards the scoped
+ * IDE channels to the single approved backend upstream. This keeps the backend
+ * credential out of page JavaScript and stabilizes the browser origin.
  *
  * Scope: HTTP (streamed, no buffering) and WebSocket upgrade piping.
  * Never a general proxy: exactly one fixed upstream per instance.
  */
-class Gateway(private val upstreamHost: String, private val upstreamPort: Int) : AutoCloseable {
+class Gateway @JvmOverloads constructor(
+    private val upstreamHost: String?,
+    private val upstreamPort: Int,
+    private val assets: WebAssets? = null,
+    private val indexRenderer: ((nonce: String) -> String)? = null,
+) : AutoCloseable {
 
     private val executor = Executors.newCachedThreadPool { r ->
         Thread(r, "gbcode-gateway").apply { isDaemon = true }
@@ -28,8 +35,12 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
     @Volatile var port: Int = -1
         private set
 
+    /** Requests denied because they targeted guest-served core workbench assets (ADR-0006). */
+    @Volatile var denyCoreCount: Int = 0
+        private set
+
     fun start(preferredPort: Int = 0): Int {
-        require(isLoopbackHost(upstreamHost)) {
+        require(upstreamHost == null || isLoopbackHost(upstreamHost)) {
             "APK gateway forwards to loopback backends only (got $upstreamHost)"
         }
         val srv = ServerSocket()
@@ -120,15 +131,42 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
 
             // Log method and path only: a query may carry tokens (contract §5
             // forbids credentials in logs).
-            android.util.Log.i(TAG, "request: $method ${target.substringBefore('?')}")
+            val path = target.substringBefore('?')
+            android.util.Log.i(TAG, "request: $method $path")
+
+            val isUpgrade = headers["connection"]?.contains("upgrade", true) == true &&
+                    headers.containsKey("sec-websocket-key")
+
+            // ADR-0006: class A core workbench assets are app-owned. Serve them
+            // locally (never falling back to the guest) and deny the guest's core
+            // asset routes with a trace, so the main workbench cannot silently
+            // fetch core HTML/JS/CSS/workers from the VM.
+            if (!isUpgrade && assets != null) {
+                if (path == "/" || path == "/index.html") {
+                    return serveIndex(client, method)
+                }
+                if (isClassAAssetPath(path)) {
+                    return serveAsset(client, method, path)
+                }
+                if (isGuestCoreAssetPath(path)) {
+                    denyCoreCount++
+                    android.util.Log.w(TAG, "deny-core: $method $path")
+                    return reject(client, 403, "Forbidden")
+                }
+                // Packaged dynamic resources (e.g. built-in web extensions)
+                // are served locally first; anything else may proxy below.
+                if (assets.open(path) != null) {
+                    return serveAsset(client, method, path)
+                }
+            }
+            val upstreamHost = this.upstreamHost
+                ?: return reject(client, 404, "Not Found")
 
             upstream = Socket()
             upstream.tcpNoDelay = true
             upstream.connect(InetSocketAddress(upstreamHost, upstreamPort), 10_000)
             val out = upstream.getOutputStream()
 
-            val isUpgrade = headers["connection"]?.contains("upgrade", true) == true &&
-                    headers.containsKey("sec-websocket-key")
             val clientWantsClose = headers["connection"]?.contains("close", true) == true
             val upstreamOrigin = "http://$upstreamHost:$upstreamPort"
             val rewritten = StringBuilder()
@@ -296,6 +334,85 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
             val out = client.getOutputStream()
             out.write(head.toByteArray(Charsets.ISO_8859_1))
             out.write(body)
+            out.flush()
+        } catch (_: IOException) {
+        }
+        closeQuietly(client)
+        return false
+    }
+
+    /** Class A (app-owned core) request paths: local-only, never proxied. */
+    private fun isClassAAssetPath(path: String): Boolean {
+        return path == "/favicon.ico" || path == "/manifest.json" || path == "/package.json" ||
+                path == "/code-192.png" || path == "/code-512.png" ||
+                path == "/callback" || path == "/callback.html" ||
+                path.startsWith("/out/") || path.startsWith("/node_modules/") ||
+                path.startsWith("/resources/server/")
+    }
+
+    /**
+     * Guest-side core workbench asset shapes: denied whenever core assets are
+     * app-owned, so the main workbench cannot load its core from the VM.
+     */
+    private fun isGuestCoreAssetPath(path: String): Boolean {
+        return path.contains("/static/out/") || path.contains("/static/node_modules/") ||
+                path.contains("/static/resources/") || path.endsWith("/workbench.html") ||
+                path.endsWith("/workbench.js") || path.endsWith("/workbench.css")
+    }
+
+    /** Serve the rendered workbench entry page (upstream template). */
+    private fun serveIndex(client: Socket, method: String): Boolean {
+        val nonce = java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(ByteArray(16).also { java.security.SecureRandom().nextBytes(it) })
+        val html = indexRenderer?.invoke(nonce) ?: return reject(client, 404, "Not Found")
+        return writeLocal(client, method, "text/html; charset=utf-8", indexCsp(nonce)) { out ->
+            out.write(html.toByteArray(Charsets.UTF_8))
+        }
+    }
+
+    /** CSP for the app-owned workbench page (upstream-shaped, loopback-scoped). */
+    private fun indexCsp(nonce: String): String {
+        val ws = "ws://127.0.0.1:$port ws://localhost:$port"
+        return "default-src 'none'; " +
+                "script-src 'self' 'unsafe-eval' blob: 'nonce-$nonce'; " +
+                "style-src 'self' 'unsafe-inline'; " +
+                "img-src 'self' data: blob:; " +
+                "font-src 'self' data:; " +
+                "media-src 'self' data: blob:; " +
+                "connect-src 'self' $ws blob: data:; " +
+                "worker-src 'self' blob:; " +
+                "frame-src 'self' blob: data:; " +
+                "child-src 'self' blob:; " +
+                "manifest-src 'self'; " +
+                "base-uri 'none'; form-action 'none'"
+    }
+
+    /** Serve a packaged core asset from the APK; missing assets are 404, never proxied. */
+    private fun serveAsset(client: Socket, method: String, path: String): Boolean {
+        val asset = assets?.open(path) ?: return reject(client, 404, "Not Found")
+        return writeLocal(client, method, asset.contentType, null) { out ->
+            asset.open().use { it.copyTo(out) }
+        }
+    }
+
+    /**
+     * Write a local response. Bodies are streamed and the connection closes:
+     * packaged assets can be tens of megabytes and are never buffered whole.
+     */
+    private fun writeLocal(
+        client: Socket,
+        method: String,
+        contentType: String,
+        csp: String?,
+        writeBody: (java.io.OutputStream) -> Unit,
+    ): Boolean {
+        try {
+            val out = client.getOutputStream()
+            val head = StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: $contentType\r\n")
+            if (csp != null) head.append("Content-Security-Policy: ").append(csp).append("\r\n")
+            head.append("Cache-Control: no-cache\r\nConnection: close\r\n\r\n")
+            out.write(head.toString().toByteArray(Charsets.ISO_8859_1))
+            if (method != "HEAD") writeBody(out)
             out.flush()
         } catch (_: IOException) {
         }

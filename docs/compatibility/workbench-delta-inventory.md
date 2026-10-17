@@ -26,6 +26,7 @@ Classifications: **B** branding/identity, **C** cosmetic, **F** functional addit
 | 18 | Notebook renderer | fails offline from CDN | works offline (row 8) | + | No action beyond row 8 | notebook lane |
 | 19 | Editing/terminal/tasks/debug/LSP/SCM | — | identical stock surfaces, verified on both | — | No delta | S01, U03 lanes |
 | 20 | Extension-host placement | `extensionKind: "ui"` reported for server-side Node execution in the web topology | identical | — | Measure actual placement, not the label (U03.03) | U03 control lane |
+| 21 | New-file keybinding (WebView) | `Ctrl+N` opens a new window/file | Android WebView/browser captures `Ctrl+N`; the page never sees it. `File: New Untitled Text File` works via the palette and `Ctrl+Alt+N` | C | Input matrix (S04) must enumerate browser-reserved chords and route around them | `2026-10-17-ADR0006-installed-frontend-milestone2.md` |
 
 ## Minimal required changes for the default product
 
