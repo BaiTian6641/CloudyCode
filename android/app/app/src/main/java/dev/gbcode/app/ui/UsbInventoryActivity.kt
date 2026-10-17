@@ -37,11 +37,13 @@ class UsbInventoryActivity : Activity() {
     private lateinit var startBridge: Button
     private lateinit var stopBridge: Button
     private lateinit var copyBridge: Button
+    private lateinit var startUsbIp: Button
+    private lateinit var stopUsbIp: Button
+    private lateinit var copyUsbIp: Button
     private lateinit var bridgeStatus: TextView
-    private val token: String by lazy {
-        intent.getStringExtra("token")
-            ?: (application as dev.gbcode.app.GbCodeApp).connectionToken()
-    }
+    private var debugToken: String? = null
+    private val token: String
+        get() = debugToken ?: (application as dev.gbcode.app.GbCodeApp).connectionToken()
 
     private val usb by lazy { getSystemService(Context.USB_SERVICE) as UsbManager }
     private var target: UsbDevice? = null
@@ -70,6 +72,7 @@ class UsbInventoryActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        debugToken = intent.getStringExtra("token")
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 32, 32, 32)
@@ -123,6 +126,21 @@ class UsbInventoryActivity : Activity() {
             text = "Copy guest bridge command"
             setOnClickListener { copyGuestCommand() }
         }
+        startUsbIp = Button(this).apply {
+            text = "Start USB/IP forwarding (arbitrary USB)"
+            setOnClickListener { startUsbIpForwarding() }
+        }
+        stopUsbIp = Button(this).apply {
+            text = "Stop USB/IP forwarding"
+            setOnClickListener {
+                startService(Intent(this@UsbInventoryActivity, dev.gbcode.app.UsbIpService::class.java)
+                    .setAction(dev.gbcode.app.UsbIpService.ACTION_STOP))
+            }
+        }
+        copyUsbIp = Button(this).apply {
+            text = "Copy USB/IP relay command"
+            setOnClickListener { copyUsbIpCommand() }
+        }
         root.addView(title)
         root.addView(status)
         root.addView(requestButton)
@@ -131,6 +149,9 @@ class UsbInventoryActivity : Activity() {
         root.addView(startBridge)
         root.addView(stopBridge)
         root.addView(copyBridge)
+        root.addView(startUsbIp)
+        root.addView(stopUsbIp)
+        root.addView(copyUsbIp)
         root.addView(scroll, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -146,7 +167,8 @@ class UsbInventoryActivity : Activity() {
         val handler = android.os.Handler(mainLooper)
         handler.post(object : Runnable {
             override fun run() {
-                bridgeStatus.text = "Bridge: ${dev.gbcode.app.SerialBridgeService.state}"
+                bridgeStatus.text = "Serial: ${dev.gbcode.app.SerialBridgeService.state}" +
+                    "   USB/IP: ${dev.gbcode.app.UsbIpService.state}"
                 handler.postDelayed(this, 800)
             }
         })
@@ -163,6 +185,33 @@ class UsbInventoryActivity : Activity() {
             .setAction(dev.gbcode.app.SerialBridgeService.ACTION_START)
             .putExtra(dev.gbcode.app.SerialBridgeService.EXTRA_TOKEN, token))
         status.text = "Forwarding requested; waiting for the guest bridge."
+    }
+
+    private fun startUsbIpForwarding() {
+        val device = target
+        if (device != null && !usb.hasPermission(device)) {
+            status.text = "Grant USB permission first; forwarding starts after it."
+            requestPermission()
+            return
+        }
+        android.util.Log.i("CloudyUsb", "usbip start, token source=" +
+            (if (debugToken != null) "intent" else "app") + " token=" + token.take(4) + "…")
+        startForegroundService(Intent(this, dev.gbcode.app.UsbIpService::class.java)
+            .setAction(dev.gbcode.app.UsbIpService.ACTION_START)
+            .putExtra(dev.gbcode.app.UsbIpService.EXTRA_TOKEN, token))
+        status.text = "USB/IP forwarding requested; waiting for the guest relay."
+    }
+
+    private fun copyUsbIpCommand() {
+        val script = assets.open("cloudy-usbip-relay.py").bufferedReader().use { it.readText() }
+        val command = "cat > ~/cloudy-usbip-relay.py <<'PY'\n$script\nPY\n" +
+            "python3 ~/cloudy-usbip-relay.py --token $token"
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE)
+            as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+            "Cloudy USB/IP relay", command))
+        status.text = "USB/IP relay command copied. Run it in the Terminal, start USB/IP " +
+            "forwarding here, then in the VM: usbip attach -r 127.0.0.1 -b cloudy-303a-1001"
     }
 
     private fun copyGuestCommand() {
@@ -295,6 +344,12 @@ class UsbInventoryActivity : Activity() {
         } finally {
             conn?.close()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        debugToken = intent.getStringExtra("token")
     }
 
     override fun onDestroy() {

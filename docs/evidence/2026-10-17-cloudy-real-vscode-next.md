@@ -111,6 +111,34 @@ esptool --port rfc2217://127.0.0.1:7002 chip_id
 
 Limits: serial only (no JTAG or arbitrary USB devices); requires the Terminal app to stay open for the port forward; the app must hold the USB device (a second Android app cannot claim it concurrently). USB/IP + VHCI remains the transparent path for JTAG/PlatformIO debugging.
 
+## Arbitrary USB: USB/IP exporter + relay implemented (2026-10-17)
+
+Transparent lane for unmodified Linux drivers/tools (JTAG, esptool, OpenOCD, arbitrary USB):
+
+| Piece | Role |
+|---|---|
+| `UsbIpService` (APK) | Connects out to the guest relay (Terminal-forwarded `127.0.0.1:3241`), token-authenticates (`CLOUDY-USBIP 1 <token>`), and serves USB/IP over multiplexed streams. Implements DEVLIST, IMPORT and URB submit for **control, bulk and interrupt** (no isochronous). Claims the device interfaces on IMPORT; releases on close. |
+| `tools/device/cloudy-usbip-relay.py` (guest) | Token-authenticated mux relay: app on `0.0.0.0:3241`, local `usbip` clients on `127.0.0.1:3240`. Each client connection gets its own stream to the exporter. |
+| USB screen | Start/Stop USB/IP forwarding + Copy relay command (script + app token). |
+
+Protocol verified against the **real ESP32-S3** through the app (workstation relay via adb reverse):
+
+- DEVLIST: `cloudy-303a-1001`, idVendor `0x303a`, idProduct `0x1001`, full speed, 3 interfaces.
+- IMPORT: status 0, device struct correct.
+- Control `GET_DESCRIPTOR(Device)`: 18 bytes, `12 01 00 02 ef 02 01 40 3a 30 01 10 …` (correct VID/PID).
+- CDC bulk IN: status 0, actual 0 (no firmware output).
+
+Guest attach (needs root + kernel support; the remaining gate):
+
+```
+python3 ~/cloudy-usbip-relay.py --token <app token>   # keep the Terminal open
+# app: Start USB/IP forwarding
+sudo modprobe vhci-hcd
+sudo usbip attach -r 127.0.0.1 -b cloudy-303a-1001
+```
+
+Limits: only the Espressif device is exported for now; isochronous transfers unsupported; if the VM kernel lacks `vhci_hcd` or module loading is blocked, the transparent path is unavailable and the serial lane remains. Bulk OUT/control OUT and interrupt paths are implemented but not yet exercised against a class driver.
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).

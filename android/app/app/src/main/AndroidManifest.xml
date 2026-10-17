@@ -48,6 +48,10 @@
             android:name=".SerialBridgeService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+        <service
+            android:name=".UsbIpService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
         <activity
             android:name=".ui.WorkbenchActivity"
             android:exported="false"
