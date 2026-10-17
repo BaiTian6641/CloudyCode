@@ -248,6 +248,17 @@ function activate(context) {
         const data = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
         result.ok = true;
         result.detail = { uri: uri.toString(), bytes: data.length, content: data.slice(0, 100) };
+      } else if (trigger.action === "secret-probe") {
+        const key = trigger.key || "gbcode.conformance.secret";
+        const value = trigger.value || "gbcode-secret-" + Date.now();
+        await context.secrets.store(key, value);
+        const readBack = await context.secrets.get(key);
+        result.ok = readBack === value;
+        result.detail = {
+          key,
+          storedLength: value.length,
+          readBackMatches: result.ok,
+        };
       } else {
         result.detail = "unknown action";
       }
