@@ -69,8 +69,8 @@ class SerialBridgeService : Service() {
         var socket: Socket? = null
         try {
             val usb = getSystemService(Context.USB_SERVICE) as UsbManager
-            val device = usb.deviceList.values.firstOrNull { it.vendorId == ESPRESSIF_VID }
-                ?: error("no Espressif USB device attached")
+            val device = SerialDevicePicker.pick(usb)
+                ?: error("no serial-capable USB device attached")
             if (!usb.hasPermission(device)) error("USB permission not granted")
             connection = usb.openDevice(device) ?: error("openDevice failed")
             val dataIface = (0 until device.interfaceCount)

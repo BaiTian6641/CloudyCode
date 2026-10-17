@@ -293,13 +293,13 @@ class UsbInventoryActivity : Activity() {
         }
         if (devices.isEmpty()) sb.append("No USB devices\n")
         output.text = sb.toString()
-        target = devices.firstOrNull { it.vendorId == ESPRESSIF_VID }
+        target = dev.gbcode.app.SerialDevicePicker.pick(manager)
         requestButton.isEnabled = target != null && !manager.hasPermission(target!!)
         claimReadButton.isEnabled = target != null && manager.hasPermission(target!!)
         status.text = if (target != null) {
-            "ESP32-S3 found (${"%04x:%04x".format(target!!.vendorId, target!!.productId)})"
+            "USB device found (${"%04x:%04x".format(target!!.vendorId, target!!.productId)})"
         } else {
-            "No Espressif device attached"
+            "No serial-capable USB device attached"
         }
         Log.i(TAG, "scan:\n$sb")
     }
@@ -390,7 +390,6 @@ class UsbInventoryActivity : Activity() {
 
     companion object {
         private const val TAG = "CloudyUsb"
-        private const val ESPRESSIF_VID = 0x303A
         private const val ACTION_USB_PERMISSION = "dev.gbcode.app.USB_PERMISSION"
     }
 }

@@ -202,6 +202,22 @@ Consequences:
 3. The app no longer auto-starts the USB/IP exporter when the Googlebook Terminal app is installed; the native passthrough owns the device. The manual USB screen remains for other environments.
 4. Remaining user-side step: replug the board (or restart the Terminal VM) with the app stopped so the Terminal app runs its attach flow, and accept its USB permission dialog. The device should then appear as `/dev/ttyACM*` (no usbip, no modprobe needed). The guest `cloudy-usbip-attach` unit is obsolete and can be disabled.
 
+## Terminal USB passthrough is stubbed; serial lane generalized and verified (2026-10-17)
+
+Definitive evidence from the shipped Terminal APK (build CL3B) and live logs:
+
+- `VmController.attachAllUsbDevices(vm)` is an **empty method** in the APK.
+- The hotplug receiver registration is present in decompiled code, but never logs "Dynamic USB hotplug broadcast receiver registered" and the receiver is absent from `dumpsys activity broadcasts`; the VM start log shows no USB activity. Replugging with the VM running produces a kernel USB attach event but no `VmTerminalApp` handling.
+- Conclusion: this Terminal build **does not attach USB devices to the VM**. No `/dev/tty*` will appear from USB, independent of the app. The earlier plan's platform gate (guest USB support) is not met.
+
+Pivot (working today): the serial lane now supports **any** CDC device, not just Espressif.
+
+- `SerialDevicePicker`: Espressif with CDC → composite multi-UART device (≥4 interfaces) → any CDC data device; internal VIDs (hub/camera/FPMCU) excluded.
+- With the SLogic UARTx4 (`359f:3101`, 4 CDC pairs) the USB screen shows the device, grants permission, and the serial bridge logs `bridge connected; CDC claimed` (first CDC data interface, endpoints 0x01/0x81). It authenticates to the guest relay at 7001 (ESTAB verified) and the guest bridge serves RFC 2217 on `127.0.0.1:7002`.
+- esptool 5.1 in PlatformIO **supports RFC2217** (`serial.serial_for_url`, RFC2217-aware reset paths), so upload/flash and monitor work over the bridge; pyserial's monitor likewise.
+
+Limits: only the first of the SLogic's four UART channels is forwarded; auto-reset depends on the SLogic mapping DTR/RTS to the target; a kernel TTY (for port pickers) requires platform USB passthrough, which this build does not provide.
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).
