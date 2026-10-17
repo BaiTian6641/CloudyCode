@@ -1,0 +1,27 @@
+# Installed-frontend reconciliation matrix (2026-10-17)
+
+Reconciles the project's implementation claims against the **revised production requirement**: core workbench assets and bootstrap belong to the installed Android client. The guest-hosted workbench website (code-server/OpenVSCode/reh-web served pages loaded in the WebView) is a useful baseline but does not pass the revised requirement. ADR-0006 is the decision record.
+
+Legend: `verified` = observed evidence exists; `implemented` = code exists, evidence pending; `baseline-only` = works but fails the revised requirement; `blocked` = needs unavailable hardware/environment.
+
+| Requirement | Code path | Implementation state | Actual validation | Environment | Evidence | Remaining blocker |
+|---|---|---|---|---|---|---|
+| Real upstream workbench UI in the APK | `android/app/.../WorkbenchActivity.kt` (WebView) → app-local gateway → guest-hosted workbench page | **baseline-only** (revised requirement fails this delivery mode) | Workbench, palette, terminal, debug, notebooks, LSP, SCM all exercised through it | workstation + emulator | `docs/evidence/2026-10-17-APK-webview-notebook.md`, ADR-0004 table | Core assets must move into the APK (ADR-0006) |
+| Core assets + bootstrap owned by the APK | (new) APK asset pipeline + gateway asset routes | **not yet implemented** → this milestone | — | — | — | Build `vscode-web` from pinned source; package + manifest; serve; offline proof |
+| Pinned, traceable workbench source | `versions.lock.json` (Code-OSS `2a59476c`, 1.141.0); pristine source+build cache `~/.cache/gbcode/upstream/vscode-1.141.0` | verified (locks + digests) | prior `vscode-reh-web` builds from this tree | workstation | `versions.lock.json`, `u0301-build.log` | none for assets; keep commit pairing |
+| Guest IDE services (file/terminal/ext host/tasks/debug) | `vscode-reh-web-linux-{x64,arm64}` (same commit) or code-server 4.141.0 (fallback) | verified (code-server lane); reh-web built, untested as the APK's service host | editing, terminal, tasks, debug, LSP, notebooks via code-server | workstation + emulator | ADR-0004 evidence table | wire the installed client to the guest channels |
+| App-local gateway | `Gateway.kt` (Host/Origin/method auth, loopback-only upstream, WS piping) | verified (S02 lane) | proxying + authorization probes (421/403/400) + WS | emulator + instrumented | `2026-10-17-S02-workstation-lane.md` | add app-asset serving + core-asset deny/trace for guest routes |
+| Pairing/session/identity | `SessionClient.java`, `guest/sessiond`, `contracts/session-v1.md` | verified | receipt + serverProof verified; authenticated reconnect; 27 node + 41 instrumented tests | workstation + emulator | `2026-10-17-S02-workstation-lane.md` | bind IDE data session (S02 review residual GB-S02-001) |
+| Native bridge authority | `NativeBridge.java` (origin + main-frame + allowlist) | verified (code-level) + defense-in-depth check | instrumented gateway tests; adversarial fixture pending | emulator | S02 lane, S02.04 notes | hostile-iframe runtime fixture |
+| Credential protection | `GbCodeApp.kt` + `CredentialStore.kt` (Keystore AES-GCM, backup excluded) | verified | prefs contain ciphertext only; migration tested | emulator | `2026-10-17-S02-workstation-lane.md` | backend identity (GB-S02-001) |
+| Workspace Trust preserved | upstream workbench (unmodified) | verified | trust prompt gates terminal creation; correction recorded | workstation | `2026-10-17-U03-terminal-trust-correction.md` | onboarding must surface trust (S03.01) |
+| Guest file-service authority | guest FS via remote services; SAF probes separate | verified (write/read on backend FS) | `workspace.fs` round-trip; SAF suite | workstation + emulator | `2026-10-16-S03-workspace-authority.md`, `2026-10-16-S03-storage-emulator.md` | Terminal mount semantics (physical) |
+| Extension installation (registry + VSIX) | stock Extensions view → Open VSX / VSIX | verified | search→trust→install→activate→theme; VSIX lane | workstation | `2026-10-17-U03-registry-install-code-server.md` | guest ARM64 artifacts (physical) |
+| Workbench parity (16 mandatory surfaces) | stock workbench | verified incl. breadcrumbs/shortcuts/profiles | evidence per surface | workstation | `2026-10-17-U03-parity-gap-closure.md` | weak rows: problem matchers/background tasks |
+| Notebooks offline | code-server webview SW (E12) | verified (baseline backend) | offline render + kernel execution | workstation + emulator | `2026-10-16-U03-notebook-lane.md` | must re-verify under the installed-asset origin |
+| Settings/profile persistence | browser profile (remote storage OFF per E13) | verified (documented divergence) | theme persists across restart on stable origin | emulator | ADR-0005, E13 | define backup vs saved semantics (S09) |
+| Physical Googlebook lanes (Terminal route, VHCI/USB, input, windowing) | — | **blocked** (device owned by another project) | read-only inventory only | physical | `device-profile-quartz.json` | device release |
+
+## Baseline check (this session)
+
+`tools/verify.sh` → ALL GREEN (sessiond 27, gateway 5, APK builds, 41 instrumented on `emulator-5554` only). Pre-existing conditions recorded in evidence: gradle `connected*AndroidTest` is deliberately not used (would touch the hands-off physical device); `npm` is absent on PATH (node suites run via `node --test`).
