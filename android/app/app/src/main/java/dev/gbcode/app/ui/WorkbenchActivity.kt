@@ -8,6 +8,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import dev.gbcode.app.BuildConfig
 import dev.gbcode.app.GbCodeApp
 import dev.gbcode.app.bridge.NativeBridge
 import dev.gbcode.app.connection.Gateway
@@ -38,6 +39,12 @@ class WorkbenchActivity : Activity() {
 
         gateway = Gateway(upstreamHost, upstreamPort).also { it.start() }
         val origin = "http://127.0.0.1:${gateway!!.port}"
+
+        if (BuildConfig.DEBUG) {
+            // Debug-only: allow CDP inspection of the workbench WebView for
+            // diagnostics and conformance runs; never enabled in release.
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
 
         webView = WebView(this)
         val settings = webView!!.settings
