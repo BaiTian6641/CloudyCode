@@ -5,7 +5,9 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
+const net = require("net");
 const path = require("path");
+const { spawn } = require("child_process");
 
 const { loadServerIdentity, fingerprint, sign, verify, publicKeyFromRaw, constantTimeEqual, b64u, sha256Hex } = require("./keys");
 const { TokenIssuer } = require("./tokens");
@@ -20,6 +22,12 @@ const SESSION_TTL_MS = 12 * 3600_000;
 class SessionDaemon {
   constructor(options) {
     this.stateDir = options.stateDir;
+    // Backend launcher: the daemon is the executor inside the Linux
+    // environment. `backend` is { cmd: [argv...], cwd?, env?, host?, port?,
+    // waitMs? } from --backend-config. Without it, backend.ensure reports
+    // not_configured and the app keeps its local-first workbench.
+    this.backend = options.backend || null;
+    this.backendChild = null;
     this.identity = loadServerIdentity(this.stateDir);
     this.tokens = new TokenIssuer();
     this.enrollment = null; // { secret, expiresAt }
@@ -61,6 +69,7 @@ class SessionDaemon {
         });
       },
       "session.close": () => ({ closing: true }),
+      "backend.ensure": () => this.ensureBackend(),
     };
 
     const appsPath = path.join(this.stateDir, "apps.json");
@@ -206,7 +215,7 @@ class SessionDaemon {
     socket.on("close", drop);
     socket.on("error", drop);
     const streams = new Map(); // streamId -> expected seq
-    const parser = new FrameParser((opcode, payload) => {
+    const parser = new FrameParser(async (opcode, payload) => {
       if (opcode === OPCODES.PING) { socket.write(encodeFrame(OPCODES.PONG, payload)); return; }
       if (opcode === OPCODES.CLOSE) { socket.end(encodeFrame(OPCODES.CLOSE, Buffer.alloc(0))); return; }
       if (opcode === OPCODES.BINARY) {
@@ -245,7 +254,9 @@ class SessionDaemon {
         return;
       }
       try {
-        const out = handler(msg.payload, session);
+        // Handlers may be synchronous or asynchronous (backend.ensure spawns
+        // and polls a port); replies are correlated by id.
+        const out = await handler(msg.payload, session);
         this.sendControl(socket, { v: 1, id: msg.id, ok: true, payload: out });
       } catch (e) {
         this.sendControl(socket, { v: 1, id: msg.id, ok: false, error: { code: e.code || "op_failed", message: e.message, retriable: e.code === "device_busy" } });
@@ -287,6 +298,54 @@ class SessionDaemon {
     return server;
   }
 
+  /**
+   * Ensure the guest IDE backend is running. This is the startup orchestration
+   * half that lives inside the Linux environment: the app asks the daemon to
+   * start the backend on launch instead of assuming it is already serving.
+   * Idempotent: a listening port means "running"; an in-flight spawn is shared.
+   */
+  async ensureBackend() {
+    const cfg = this.backend;
+    if (!cfg || !Array.isArray(cfg.cmd) || cfg.cmd.length === 0) {
+      return { state: "not_configured" };
+    }
+    const host = cfg.host || "127.0.0.1";
+    const port = Number(cfg.port) || 0;
+    if (port > 0 && await portOpen(host, port)) {
+      return { state: "running", host, port };
+    }
+    if (!this.backendChild) {
+      try {
+        const logFd = fs.openSync(path.join(this.stateDir, "backend.log"), "a");
+        const child = spawn(cfg.cmd[0], cfg.cmd.slice(1), {
+          cwd: cfg.cwd || process.cwd(),
+          env: { ...process.env, ...(cfg.env || {}) },
+          detached: true,
+          stdio: ["ignore", logFd, logFd],
+        });
+        child.on("error", (e) => {
+          this.backendChild = null;
+          this.backendError = e.message;
+        });
+        child.on("exit", () => { this.backendChild = null; });
+        child.unref();
+        this.backendChild = child;
+        this.backendError = null;
+      } catch (e) {
+        this.backendError = e.message;
+        return { state: "failed", error: e.message };
+      }
+    }
+    if (port <= 0) return { state: "started", port: null };
+    const deadline = Date.now() + (Number(cfg.waitMs) || 20_000);
+    while (Date.now() < deadline) {
+      if (await portOpen(host, port)) return { state: "started", host, port };
+      if (this.backendError) return { state: "failed", error: this.backendError };
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    return { state: "starting", host, port, error: this.backendError || undefined };
+  }
+
   /** Destroy channel sockets and close the HTTP server. */
   async shutdown(server) {
     for (const socket of this.channelSockets) {
@@ -299,3 +358,14 @@ class SessionDaemon {
 }
 
 module.exports = { SessionDaemon };
+
+/** True when something accepts TCP connections at host:port. */
+function portOpen(host, port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const done = (v) => { socket.destroy(); resolve(v); };
+    socket.setTimeout(400, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}

@@ -144,9 +144,19 @@ class OnboardingActivity : Activity() {
                 if (helloFingerprint != state.fingerprint) {
                     throw SecurityException("daemon identity changed since pairing")
                 }
+                // Startup orchestration: ask the daemon (inside the Linux
+                // environment) to start the IDE backend before the workbench
+                // opens. Best-effort: the workbench is app-owned, so a failure
+                // only means no guest services on this launch.
+                val ensureState = try {
+                    client.backendEnsure(session).optString("state", "unknown")
+                } catch (e: Exception) {
+                    log("backend ensure failed: ${e.message}")
+                    "failed"
+                }
                 runOnUiThread {
                     app.setState(ConnectionState.CONNECTED, state.fingerprint)
-                    log("reconnected; daemon proof verified (fingerprint ${state.fingerprint})")
+                    log("reconnected; daemon proof verified (fingerprint ${state.fingerprint}); backend: $ensureState")
                     openWorkbench()
                 }
             } catch (e: Exception) {
@@ -185,6 +195,15 @@ class OnboardingActivity : Activity() {
                 if (helloFingerprint != fingerprint) {
                     throw SecurityException("channel fingerprint differs from signed receipt")
                 }
+                // Startup orchestration (same as reconnect): start the backend
+                // in the Linux environment through the freshly authenticated
+                // channel before the workbench opens.
+                val ensureState = try {
+                    client.backendEnsure(result.getString("session")).optString("state", "unknown")
+                } catch (e: Exception) {
+                    log("backend ensure failed: ${e.message}")
+                    "failed"
+                }
                 runOnUiThread {
                     app.setState(ConnectionState.PAIRED, fingerprint)
                     app.backendBaseUrl = workbenchBase
@@ -205,7 +224,7 @@ class OnboardingActivity : Activity() {
                         } else "code-server",
                     ))
                     app.setState(ConnectionState.CONNECTED)
-                    log("paired; enrollment receipt verified; server fingerprint:\n$fingerprint")
+                    log("paired; enrollment receipt verified; backend: $ensureState; server fingerprint:\n$fingerprint")
                     openWorkbench()
                 }
             } catch (e: Exception) {

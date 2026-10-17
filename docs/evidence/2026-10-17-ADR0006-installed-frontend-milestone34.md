@@ -38,6 +38,22 @@ The installed (APK-owned) Code-OSS workbench now connects to the **guest remote 
 - **Guest-allowed:** `/<quality>-<commit>` (WS upgrade), `/<quality>-<commit>/vscode-remote-resource` (dynamic extension/webview resources).
 - **Guest-denied:** `/<quality>-<commit>/static/out/**`, `/static/node_modules/**`, `/static/resources/**`, `*/workbench.{html,js,css}` → 403 + `deny-core` trace.
 
+## Startup orchestration: app launch starts the Linux backend
+
+Reference check (Antigravity): Google Antigravity's Googlebook surface is an Android app (`com.google.android.apps.antigravity`, pre-installed via Google Play) whose agent/backend executes **inside the Debian environment** (its IDE/CLI builds target Googlebook's glibc). Its docs expose no third-party "run a command in the VM" API. GBCode therefore implements the same placement with its own in-guest daemon: the app asks the daemon to start the backend over the authenticated channel.
+
+Implementation: `backend.ensure` op (contracts/session-v1.md §4.1) + `--backend-config` launcher. The daemon spawns the backend detached (log `<state-dir>/backend.log`), polls its port, and reports `running|started|starting|failed|not_configured`. The app calls it after pairing and on every authenticated reconnect **before** opening the workbench; failures are non-fatal.
+
+| Scenario | Result |
+|---|---|
+| Cold start with backend stopped (port 8085 closed, no server process) → user pairs | PASS — app log `backend: started`; daemon spawned the server (PID 1531176, 13:31:46); `ss` shows LISTEN 127.0.0.1:8085; guest log shows ManagementConnection + ExtensionHostConnection and the extension host process; workbench opens on `gbcode-m4-ws` |
+| Relaunch (force-stop → open) | PASS — `backend: running`; same PID 1531176; no duplicate process; workbench reconnects |
+| Launcher cannot spawn | PASS (test) — `failed` with the spawn error instead of hanging |
+
+Evidence: `ADR0006-startup-backend-started.png`; app log lines; `ss -ltnp`; guest `backend.log`. Tests: 3 new sessiond tests (not_configured, `started`→`running`, fail-fast ENOENT); `tools/verify.sh` ALL GREEN.
+
+Limitation: starting the **VM itself** (and the daemon inside it) is the Googlebook-platform lane — no public third-party API was found. This orchestration assumes the daemon already runs in the Linux environment (real Terminal VM, or the workstation lane here).
+
 ## Tests
 
 `tools/verify.sh` → ALL GREEN. sessiond 27/27; gateway 5/5; instrumented 47/47 (emulator only), including `WebAssetGatewayTest` with the renderer's new parameters.

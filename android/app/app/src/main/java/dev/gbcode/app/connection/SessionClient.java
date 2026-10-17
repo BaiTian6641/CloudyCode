@@ -233,6 +233,8 @@ public final class SessionClient {
         out.put("receiptVerified", true);
         String session = session(paired.appHash, paired.serverPublicKey);
         out.put("sessionPrefix", session.substring(0, 12) + "…");
+        // Full token for the caller's immediate startup ensure; never persisted.
+        out.put("session", session);
         out.put("hello", channelHello(session));
         return out;
     }
@@ -263,6 +265,33 @@ public final class SessionClient {
                 throw new SecurityException("channel hello missing server fingerprint");
             }
             return hello;
+        }
+    }
+
+    /**
+     * Ask the in-guest daemon to start the IDE backend. This is the startup
+     * command to the Linux environment: the daemon (which lives there) spawns
+     * the backend and waits for its port. Idempotent; the app calls it on
+     * every launch before the workbench opens and treats failure as
+     * non-fatal (the app-owned workbench still starts).
+     */
+    public JSONObject backendEnsure(String session) throws Exception {
+        String host = base.substring(base.indexOf("://") + 3);
+        int colon = host.lastIndexOf(':');
+        String hostname = colon > 0 ? host.substring(0, colon) : host;
+        int port = colon > 0 ? Integer.parseInt(host.substring(colon + 1)) : 80;
+        try (WsClient ws = WsClient.connect(hostname, port, "/channel", 10_000,
+                new String[] { "X-GBCode-Session: " + session })) {
+            ws.sendText("{\"v\":1,\"id\":2,\"op\":\"backend.ensure\",\"payload\":{}}");
+            WsClient.Frame frame = ws.receive();
+            JSONObject reply = new JSONObject(new String(frame.payload, StandardCharsets.UTF_8));
+            if (!reply.optBoolean("ok", false)) {
+                throw new IllegalStateException("backend.ensure rejected: "
+                        + reply.optJSONObject("error"));
+            }
+            JSONObject payload = reply.optJSONObject("payload");
+            if (payload == null) throw new IllegalStateException("backend.ensure missing payload");
+            return payload;
         }
     }
 }

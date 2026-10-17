@@ -54,6 +54,20 @@ Token format: `v1.<payload64>.<sig64>` where payload = `{app, iat, exp, sid}` an
 
 Initial ops (S02.02 scope only): `session.hello`, `session.capabilities`, `session.ping`, `session.close`, `device.list` (empty until S05), `error`. Hardware ops are defined by S05/U01 contracts, not here.
 
+### 4.1 Backend startup op (ADR-0006 startup orchestration)
+
+`backend.ensure` — runs on the authenticated channel; the daemon executes the configured launcher **inside the Linux environment** and reports the outcome. Payload `{}`; reply payload:
+
+| field | meaning |
+|---|---|
+| `state: "not_configured"` | no `--backend-config`; the app keeps its local-first workbench |
+| `state: "running"` | the configured host/port already accepts connections; no new process |
+| `state: "started"` | a launcher was spawned and its port came up within `waitMs` |
+| `state: "starting"` | the child is alive but the port is not up yet |
+| `state: "failed"` | spawn error (e.g. ENOENT) or a launcher error; `error` carries the message |
+
+Config (`--backend-config <file>`): `{ "cmd": [argv...], "cwd"?, "env"?, "host"?="127.0.0.1", "port"?, "waitMs"?=20000 }`. The child is detached, stdio goes to `<state-dir>/backend.log`, and a single in-flight child is shared so repeated calls cannot double-start. The app calls this on every launch (pairing and authenticated reconnect) **before** opening the workbench; failures are non-fatal by design (the workbench is app-owned).
+
 ## 5. Security invariants
 
 - No pairing endpoint outside an explicit enrollment window; no unauthenticated op except `/healthz`, `/pair`, `/session/challenge`, `/session`.
