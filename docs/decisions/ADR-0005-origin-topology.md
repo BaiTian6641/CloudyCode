@@ -18,7 +18,7 @@ Measured on the emulator (2026-10-17, `docs/evidence/2026-10-17-S04-window-resiz
 
 Bind the gateway to a **stable loopback port** (`127.0.0.1:41873`, `PREFERRED_GATEWAY_PORT`) so the WebView origin is identical across activity recreations and process restarts.
 
-Conflict rule (S02.03): if the preferred port is already owned by another process, the bind fails; the gateway **falls back to an ephemeral port and logs the fallback**. It never connects to or routes credentials through the occupying process. The fallback produces a fresh verified origin (state for that origin starts empty) — acceptable for a rare conflict, and it must be surfaced in diagnostics.
+Conflict rule (S02.03): if the preferred port is already owned by another process, the bind fails; the gateway **falls back to an ephemeral port and logs the fallback**. It never connects to or routes credentials through the occupying process. The fallback produces a fresh verified origin (state for that origin starts empty) — acceptable for a rare conflict, and it must be surfaced in diagnostics. Verified on the emulator, including a conflict from a **dual-stack IPv6 wildcard** listener (`docs/evidence/2026-10-17-S02-gateway-port-conflict.md`).
 
 ## Evidence after the change
 

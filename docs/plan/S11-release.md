@@ -61,6 +61,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 **Deliverable:** `signed APKs and guest bundles`.
 
 - [ ] Build the declared Android ABIs and corresponding guest packages on supported build hosts.
+  - Evidence (2026-10-17): `assembleDebug` and `assembleRelease` succeed; the release artifact contains **no** `setWebContentsDebuggingEnabled` reference (debug has one) and is unsigned by design. `docs/evidence/2026-10-17-S11-build-variant-check.md`. Open: signing workflow, ABI packaging policy, reproducible variance.
 - [ ] Check native-library/page-size compatibility, signatures, reproducible manifest data and version constraints.
 - [ ] Keep signing operations in a restricted release workflow separate from general coding agents.
 - [ ] Reproduce from pinned inputs, enumerate build variance rather than promise bit-identical signing, verify native 16 KB page-size compatibility where required and retain hashes, notices, symbols and rollback artifacts.
