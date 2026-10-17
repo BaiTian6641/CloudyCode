@@ -58,6 +58,31 @@ Supported paths, in order:
 
 The one-time build script now enables the **systemd user unit** (`cloudy-code.service`) and `loginctl enable-linger` for the VM user. The first app "Copy Cloudy backend start command" seeds the app's connection token and restarts the unit; afterwards the backend starts with the VM. Fallback when systemd is unavailable: the same command runs `start-backend.sh` in the foreground. The Terminal app is still required for the VM→Android port bridge.
 
+## USB host spike on the real Googlebook (2026-10-17, ESP32-S3 attached)
+
+Device: `303a:1001` "USB JTAG/serial debug unit", serial `24:EC:4A:07:FD:A8`, 3 interfaces:
+
+| Interface | Class | Endpoints |
+|---|---|---|
+| 1.0 | `0x02` CDC communication | `0x82` interrupt IN |
+| 1.1 | `0x0a` CDC data | `0x01` bulk OUT, `0x81` bulk IN |
+| 1.2 | `0xff` vendor (JTAG) | `0x02` bulk OUT, `0x83` bulk IN |
+
+`UsbInventoryActivity` (native host spike, exported for diagnostics) proves:
+
+1. Enumeration of all host devices.
+2. Android 17 requires the per-device USB permission even to read names/descriptors (`SecurityException` when absent; the scan now guards this instead of crashing).
+3. `requestPermission` + user grant exposes the full descriptor tree.
+4. `openDevice` + `claimInterface(CDC data, force)` succeeds; a 1 s bulk read on `0x81` returns 0 bytes (no firmware output yet) without error. Read-only: no writes, no DTR/RTS toggling (which could reset the target).
+
+This is the Android half of the hardware broker (S07.02). Remaining gate: guest-side **VHCI/USB/IP import** (or the documented serial fallback if the VM kernel lacks `vhci_hcd`). PlatformIO in the VM cannot see the board until forwarding exists.
+
+Guest probe command (read-only) to run once in the Terminal:
+
+```
+command -v usbip; ls /sys/module/vhci_hcd >/dev/null 2>&1 && echo VHCI_LOADED; ls /lib/modules/$(uname -r)/kernel/drivers/usb/usbip 2>/dev/null; uname -r
+```
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).

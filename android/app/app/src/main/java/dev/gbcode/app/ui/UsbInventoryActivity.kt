@@ -1,0 +1,248 @@
+package dev.gbcode.app.ui
+
+import android.app.Activity
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.Color
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
+import android.hardware.usb.UsbInterface
+import android.hardware.usb.UsbManager
+import android.os.Build
+import android.os.Bundle
+import android.util.Log
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+
+/**
+ * USB host diagnostic (S07.02 spike): enumerate devices/interfaces/endpoints,
+ * request the user's USB permission, then claim the CDC data interface and read
+ * bytes from the ESP32-S3 native USB serial endpoint.
+ *
+ * This proves the Android-side half of the hardware broker. The guest side
+ * (USB/IP import or a serial transport into the VM) builds on these handles.
+ */
+class UsbInventoryActivity : Activity() {
+    private lateinit var output: TextView
+    private lateinit var status: TextView
+    private lateinit var requestButton: Button
+    private lateinit var claimReadButton: Button
+
+    private val usb by lazy { getSystemService(Context.USB_SERVICE) as UsbManager }
+    private var target: UsbDevice? = null
+    private var receiverRegistered = false
+
+    private val permissionReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != ACTION_USB_PERMISSION) return
+            val device: UsbDevice? = if (Build.VERSION.SDK_INT >= 33) {
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            }
+            val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+            status.text = if (granted) {
+                "USB permission granted for ${device?.productName ?: "device"}"
+            } else {
+                "USB permission denied"
+            }
+            claimReadButton.isEnabled = granted
+            Log.i(TAG, "permission granted=$granted device=${device?.deviceName}")
+            scan()
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 32, 32, 32)
+        }
+        val title = TextView(this).apply {
+            text = "USB devices"
+            textSize = 22f
+            setTextColor(Color.parseColor("#e0e0e0"))
+        }
+        status = TextView(this).apply {
+            text = "Scanning…"
+            textSize = 14f
+            setTextColor(Color.parseColor("#c0c0c0"))
+            setPadding(0, 8, 0, 12)
+        }
+        output = TextView(this).apply {
+            textSize = 12f
+            setTextColor(Color.parseColor("#DBE8EC"))
+            setBackgroundColor(Color.parseColor("#101C22"))
+            setPadding(16, 16, 16, 16)
+        }
+        val scroll = ScrollView(this).apply { addView(output) }
+        requestButton = Button(this).apply {
+            text = "Request USB permission"
+            isEnabled = false
+            setOnClickListener { requestPermission() }
+        }
+        claimReadButton = Button(this).apply {
+            text = "Claim CDC interface and read 1 s"
+            isEnabled = false
+            setOnClickListener { claimAndRead() }
+        }
+        root.addView(title)
+        root.addView(status)
+        root.addView(requestButton)
+        root.addView(claimReadButton)
+        root.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        setContentView(root)
+
+        val filter = IntentFilter(ACTION_USB_PERMISSION)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(permissionReceiver, filter, RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(permissionReceiver, filter)
+        }
+        receiverRegistered = true
+        scan()
+    }
+
+    private fun scan() {
+        val manager = usb
+        val sb = StringBuilder()
+        val devices = manager.deviceList.values.sortedBy { "${it.vendorId}:${it.productId}" }
+        for (dev in devices) {
+            val granted = manager.hasPermission(dev)
+            sb.append("%04x:%04x".format(dev.vendorId, dev.productId))
+            // Descriptor/name access requires the per-device USB permission on
+            // Android 17; surface that instead of crashing the scan.
+            try {
+                sb.append("  %s / %s  serial=%s".format(
+                    dev.manufacturerName ?: "?", dev.productName ?: "?",
+                    dev.serialNumber ?: "?"))
+            } catch (e: SecurityException) {
+                sb.append("  (names need USB permission)")
+            }
+            sb.append(if (granted) "" else "  [permission required]").append("\n")
+            if (granted) {
+                try {
+                    for (i in 0 until dev.interfaceCount) {
+                        val iface: UsbInterface = dev.getInterface(i)
+                        sb.append("  iface %d class=%02x sub=%02x proto=%02x eps=%d\n".format(
+                            iface.id, iface.interfaceClass, iface.interfaceSubclass,
+                            iface.interfaceProtocol, iface.endpointCount))
+                        for (e in 0 until iface.endpointCount) {
+                            val ep: UsbEndpoint = iface.getEndpoint(e)
+                            sb.append("    ep %02x type=%d dir=%s max=%d\n".format(
+                                ep.address, ep.type,
+                                if (ep.direction == UsbConstants.USB_DIR_IN) "in" else "out",
+                                ep.maxPacketSize))
+                        }
+                    }
+                } catch (e: SecurityException) {
+                    sb.append("  (descriptors need USB permission)\n")
+                }
+            }
+        }
+        if (devices.isEmpty()) sb.append("No USB devices\n")
+        output.text = sb.toString()
+        target = devices.firstOrNull { it.vendorId == ESPRESSIF_VID }
+        requestButton.isEnabled = target != null && !manager.hasPermission(target!!)
+        claimReadButton.isEnabled = target != null && manager.hasPermission(target!!)
+        status.text = if (target != null) {
+            "ESP32-S3 found (${"%04x:%04x".format(target!!.vendorId, target!!.productId)})"
+        } else {
+            "No Espressif device attached"
+        }
+        Log.i(TAG, "scan:\n$sb")
+    }
+
+    private fun requestPermission() {
+        val device = target ?: return
+        val flags = PendingIntent.FLAG_IMMUTABLE
+        val pi = PendingIntent.getBroadcast(
+            this, 0, Intent(ACTION_USB_PERMISSION).setPackage(packageName), flags)
+        usb.requestPermission(device, pi)
+        status.text = "Waiting for the system USB permission dialog…"
+    }
+
+    /**
+     * Claim the CDC data interface (class 0x0a: bulk OUT/IN) and read whatever
+     * the firmware emits for one second. Read-only: this never writes and never
+     * toggles DTR/RTS (which could reset the target).
+     */
+    private fun claimAndRead() {
+        val device = target ?: return
+        if (!usb.hasPermission(device)) {
+            status.text = "USB permission not granted"
+            return
+        }
+        val dataIface = (0 until device.interfaceCount)
+            .map { device.getInterface(it) }
+            .firstOrNull { it.interfaceClass == UsbConstants.USB_CLASS_CDC_DATA }
+        if (dataIface == null) {
+            status.text = "CDC data interface not found"
+            return
+        }
+        val epIn = (0 until dataIface.endpointCount)
+            .map { dataIface.getEndpoint(it) }
+            .firstOrNull { it.direction == UsbConstants.USB_DIR_IN }
+        if (epIn == null) {
+            status.text = "CDC IN endpoint not found"
+            return
+        }
+        var conn: UsbDeviceConnection? = null
+        try {
+            conn = usb.openDevice(device) ?: run {
+                status.text = "openDevice returned null"
+                return
+            }
+            val claimed = conn.claimInterface(dataIface, true)
+            Log.i(TAG, "claimInterface(${dataIface.id}) = $claimed")
+            if (!claimed) {
+                status.text = "Could not claim CDC interface (driver busy)"
+                return
+            }
+            val buffer = ByteArray(4096)
+            val total = StringBuilder()
+            val deadline = System.currentTimeMillis() + 1000
+            var bytesRead = 0
+            while (System.currentTimeMillis() < deadline) {
+                val n = conn.bulkTransfer(epIn, buffer, buffer.size, 200)
+                if (n > 0) {
+                    bytesRead += n
+                    total.append(String(buffer, 0, n, Charsets.UTF_8))
+                }
+            }
+            conn.releaseInterface(dataIface)
+            status.text = "Claimed CDC; read $bytesRead byte(s) in 1 s"
+            if (total.isNotEmpty()) {
+                output.append("\n--- CDC read ---\n" + total.take(2000))
+            }
+        } catch (e: Exception) {
+            status.text = "USB read failed: ${e.message}"
+            Log.w(TAG, "read failed", e)
+        } finally {
+            conn?.close()
+        }
+    }
+
+    override fun onDestroy() {
+        if (receiverRegistered) {
+            unregisterReceiver(permissionReceiver)
+            receiverRegistered = false
+        }
+        super.onDestroy()
+    }
+
+    companion object {
+        private const val TAG = "CloudyUsb"
+        private const val ESPRESSIF_VID = 0x303A
+        private const val ACTION_USB_PERMISSION = "dev.gbcode.app.USB_PERMISSION"
+    }
+}

@@ -40,6 +40,9 @@
             android:exported="true"
             android:launchMode="singleTask" />
         <activity
+            android:name=".ui.UsbInventoryActivity"
+            android:exported="true" />
+        <activity
             android:name=".ui.WorkbenchActivity"
             android:exported="false"
             android:launchMode="singleTop"
