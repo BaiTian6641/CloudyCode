@@ -75,30 +75,9 @@ exec ./node out/server-main.js \
 SH
 chmod +x "$BASE/start-backend.sh"
 
-mkdir -p "$HOME/.config/systemd/user"
-cat > "$HOME/.config/systemd/user/cloudy-code.service" <<UNIT
-[Unit]
-Description=Cloudy Code Linux backend (Code - OSS reh-web)
-After=network.target
-
-[Service]
-ExecStart=$BASE/start-backend.sh
-Restart=on-failure
-RestartSec=2
-
-[Install]
-WantedBy=default.target
-UNIT
-systemctl --user daemon-reload 2>/dev/null || true
-# Enable at login/boot. The unit stays down until the app seeds the token
-# (one Copy start command action); afterwards every VM start brings the
-# backend up. Linger is needed for user services to start without a login.
-systemctl --user enable cloudy-code.service 2>/dev/null || true
-loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER" 2>/dev/null || true
-
 echo
 echo "== done =="
-echo "auto-start: systemd user unit enabled (needs one token seed from the app)"
+echo "next: run the Cloudy setup script (it registers the backend service and auto-start)"
 echo "backend: $BASE/reh-web"
 echo "start:   $BASE/start-backend.sh"
 echo "Now copy the start command from the Cloudy Code setup screen and run it,"

@@ -21,6 +21,12 @@ object GuestSetup {
             "{ systemctl --user restart cloudy-code.service 2>/dev/null || " +
             "\$HOME/.local/share/cloudy/start-backend.sh; }"
 
+    /** One command that provisions the guest once (bridges + backend service). */
+    fun setupCommand(token: String, script: String): String =
+        "cat > ~/cloudy-setup.sh <<'CLOUDY_SETUP_EOF'\n" + script +
+            "\nCLOUDY_SETUP_EOF\n" +
+            "bash ~/cloudy-setup.sh --token $token"
+
     const val COMMAND =
         "curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone " +
             "--prefix=\$HOME/.local && nohup \$HOME/.local/bin/code-server " +

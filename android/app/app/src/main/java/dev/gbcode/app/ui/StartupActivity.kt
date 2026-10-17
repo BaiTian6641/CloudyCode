@@ -65,11 +65,14 @@ class StartupActivity : Activity() {
         offline = findViewById(R.id.offline)
         advanced = findViewById(R.id.advanced)
 
-        findViewById<TextView>(R.id.commandBlock).text = GuestSetup.COMMAND
+        findViewById<TextView>(R.id.commandBlock).text =
+            "bash ~/cloudy-setup.sh --token <token>"
         findViewById<Button>(R.id.copySetup).setOnClickListener {
-            setClipboard("Cloudy Code setup", GuestSetup.COMMAND)
-            detail.text = "Command copied. Paste it in the Terminal; this screen continues " +
-                "by itself when the server is available."
+            val script = assets.open("cloudy-setup.sh").bufferedReader().use { it.readText() }
+            val token = (application as GbCodeApp).connectionToken()
+            setClipboard("Cloudy Code setup", GuestSetup.setupCommand(token, script))
+            detail.text = "Setup command copied (script + token). Paste it in the Terminal and " +
+                "run it once; this screen continues by itself when the backend is available."
         }
         findViewById<Button>(R.id.openTerminal).setOnClickListener { openTerminalApp() }
         findViewById<Button>(R.id.copyBuildScript).setOnClickListener {
@@ -78,12 +81,7 @@ class StartupActivity : Activity() {
             detail.text = "Build script copied. Paste it in the Terminal once (about 15-30 " +
                 "minutes). When it finishes, copy the Cloudy backend start command and run it."
         }
-        findViewById<Button>(R.id.copyRehWebStart).setOnClickListener {
-            val token = (application as GbCodeApp).connectionToken()
-            setClipboard("Cloudy backend start", GuestSetup.rehWebStartCommand(token))
-            detail.text = "Start command copied. Run it in the Terminal; this screen connects " +
-                "on port 8085 when the Cloudy backend is up."
-        }
+
         findViewById<Button>(R.id.retry).setOnClickListener {
             pollBoth.set(false)
             handler.removeCallbacks(setupPoll)
