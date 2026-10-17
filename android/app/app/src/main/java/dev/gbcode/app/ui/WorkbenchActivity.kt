@@ -69,36 +69,33 @@ class WorkbenchActivity : Activity() {
         setContentView(root)
 
         // The backend credential stays native: we log in through the gateway
-        // from app code and hand the WebView only the session cookie.
+        // from app code and hand the WebView only the session cookie(s).
         val password = app.backendPassword
         if (password != null) {
             Thread {
                 try {
-                    val cookie = nativeLogin(origin, password)
-                    if (cookie != null) {
-                        val manager = android.webkit.CookieManager.getInstance()
-                        manager.setCookie(origin, cookie)
-                        manager.flush()
-                        android.util.Log.i("GBCodeWorkbench", "backend session cookie installed natively")
+                    val installed = nativeLogin(origin, password)
+                    if (installed == 0) {
+                        android.util.Log.w("GBCodeWorkbench", "no backend cookie installed; the workbench may require re-login")
                     }
-                    runOnUiThread { webView!!.loadUrl("$origin/") }
                 } catch (e: Exception) {
                     android.util.Log.w("GBCodeWorkbench", "native login failed; loading anyway", e)
-                    runOnUiThread { webView!!.loadUrl("$origin/") }
                 }
+                runOnUiThread { webView!!.loadUrl("$origin/") }
             }.start()
         } else {
             webView!!.loadUrl("$origin/")
         }
     }
 
-
     /**
-     * POST the backend login form through the gateway and return the session
-     * cookie header value, or null when the backend has no password auth.
-     * code-server: POST /login with password field -> Set-Cookie session.
+     * POST the backend login form through the gateway and install the returned
+     * session cookie(s) with their attributes intact. Returns how many cookie
+     * names were found stored afterward. code-server: POST /login with password
+     * field -> Set-Cookie session. Cookie values are credentials and are never
+     * logged.
      */
-    private fun nativeLogin(origin: String, password: String): String? {
+    private fun nativeLogin(origin: String, password: String): Int {
         val body = "password=" + java.net.URLEncoder.encode(password, "UTF-8") + "&base="
         val conn = java.net.URL("$origin/login").openConnection() as java.net.HttpURLConnection
         conn.requestMethod = "POST"
@@ -107,10 +104,24 @@ class WorkbenchActivity : Activity() {
         conn.instanceFollowRedirects = false
         conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
         val code = conn.responseCode
-        val cookie = conn.getHeaderField("Set-Cookie")?.substringBefore(";")
+        val cookies = dev.gbcode.app.connection.Cookies.setCookieHeaders(conn)
         conn.disconnect()
-        android.util.Log.i("GBCodeWorkbench", "native login HTTP $code, cookie=${cookie != null}")
-        return cookie
+
+        val manager = android.webkit.CookieManager.getInstance()
+        // CookieManager's callback overload needs a Looper; install on the UI
+        // thread and wait so the cookie is in place before the page loads.
+        val latch = java.util.concurrent.CountDownLatch(1)
+        runOnUiThread {
+            for (raw in cookies) manager.setCookie(origin, raw)
+            manager.flush()
+            latch.countDown()
+        }
+        latch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+        val stored = manager.getCookie(origin) ?: ""
+        val names = cookies.map { it.substringBefore("=").trim() }
+        val installed = names.count { stored.contains("$it=") }
+        android.util.Log.i("GBCodeWorkbench", "native login HTTP $code, set-cookie=${cookies.size}, stored=$installed names=$names")
+        return installed
     }
     override fun onDestroy() {
         webView?.destroy()

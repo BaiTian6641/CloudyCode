@@ -18,13 +18,13 @@ object CredentialStore {
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
 
-    private fun key(): SecretKey {
+    private fun key(alias: String): SecretKey {
         val ks = KeyStore.getInstance(ANDROID_KEYSTORE)
         ks.load(null)
-        if (!ks.containsAlias(KEY_ALIAS)) {
+        if (!ks.containsAlias(alias)) {
             val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
             gen.init(KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
+                alias,
                 KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
@@ -32,13 +32,15 @@ object CredentialStore {
                 .build())
             gen.generateKey()
         }
-        return ks.getKey(KEY_ALIAS, null) as SecretKey
+        return ks.getKey(alias, null) as SecretKey
     }
 
     /** Encrypt to iv+ciphertext bytes, base64url-ready for prefs. */
-    fun encrypt(plain: ByteArray): ByteArray {
+    fun encrypt(plain: ByteArray): ByteArray = encrypt(KEY_ALIAS, plain)
+
+    fun encrypt(alias: String, plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key())
+        cipher.init(Cipher.ENCRYPT_MODE, key(alias))
         val encrypted = cipher.doFinal(plain)
         val iv = cipher.iv
         val out = ByteArray(4 + iv.size + encrypted.size)
@@ -49,13 +51,15 @@ object CredentialStore {
         return out
     }
 
-    fun decrypt(blob: ByteArray): ByteArray {
+    fun decrypt(blob: ByteArray): ByteArray = decrypt(KEY_ALIAS, blob)
+
+    fun decrypt(alias: String, blob: ByteArray): ByteArray {
         val ivLen = ((blob[0].toInt() and 0xff) shl 24) or ((blob[1].toInt() and 0xff) shl 16) or
                 ((blob[2].toInt() and 0xff) shl 8) or (blob[3].toInt() and 0xff)
         val iv = blob.copyOfRange(4, 4 + ivLen)
         val encrypted = blob.copyOfRange(4 + ivLen, blob.size)
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
+        cipher.init(Cipher.DECRYPT_MODE, key(alias), GCMParameterSpec(128, iv))
         return cipher.doFinal(encrypted)
     }
 }

@@ -50,12 +50,20 @@ class GbCodeApp : Application() {
 
     private fun prefs() = getSharedPreferences("gbcode", Context.MODE_PRIVATE)
 
+    private val passwordAlias = "gbcode-backend-password"
+
+    private fun hexOf(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
+
+    private fun bytesOf(hex: String) = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
     fun savePairedState(state: PairedState) {
-        // Encrypt the Ed25519 seed with the Android Keystore AES-GCM key;
+        // Secrets (pairing seed, backend password) are Keystore-encrypted;
         // plaintext never touches persistent storage.
-        val seedBytes = state.seedHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        val seedEncHex = dev.gbcode.app.connection.CredentialStore.encrypt(seedBytes)
-            .joinToString("") { "%02x".format(it) }
+        val seedEncHex = hexOf(dev.gbcode.app.connection.CredentialStore.encrypt(bytesOf(state.seedHex)))
+        val passwordEncHex = state.backendPassword?.let {
+            hexOf(dev.gbcode.app.connection.CredentialStore.encrypt(
+                passwordAlias, it.toByteArray(Charsets.UTF_8)))
+        }
         prefs().edit()
             .putString("seedEnc", seedEncHex)
             .putString("appHash", state.appHash)
@@ -63,7 +71,8 @@ class GbCodeApp : Application() {
             .putString("workbench", state.workbenchBase)
             .putString("fingerprint", state.fingerprint)
             .putString("serverPublicKey", state.serverPublicKey)
-            .putString("backendPassword", state.backendPassword)
+            .putString("passwordEnc", passwordEncHex)
+            .remove("backendPassword") // legacy plaintext key must never survive
             .apply()
         backendPassword = state.backendPassword
     }
@@ -76,11 +85,31 @@ class GbCodeApp : Application() {
         val workbench = p.getString("workbench", null) ?: return null
         val fp = p.getString("fingerprint", "") ?: ""
         val serverPublicKey = p.getString("serverPublicKey", null) ?: return null
-        val seedBytes = dev.gbcode.app.connection.CredentialStore.decrypt(
-            seedEnc.chunked(2).map { it.toInt(16).toByte() }.toByteArray())
-        val seedHex = seedBytes.joinToString("") { "%02x".format(it) }
+        val seedBytes = dev.gbcode.app.connection.CredentialStore.decrypt(bytesOf(seedEnc))
+        val seedHex = hexOf(seedBytes)
+        val password = loadPassword(p)
         return PairedState(seedHex, appHash, daemon, workbench, fp,
-            serverPublicKey, p.getString("backendPassword", null))
+            serverPublicKey, password)
+    }
+
+    /**
+     * Decrypt the stored backend password; a legacy plaintext value (written
+     * before S02.03) is migrated once and removed from disk.
+     */
+    private fun loadPassword(p: android.content.SharedPreferences): String? {
+        val enc = p.getString("passwordEnc", null)
+        if (enc != null) {
+            return String(
+                dev.gbcode.app.connection.CredentialStore.decrypt(passwordAlias, bytesOf(enc)),
+                Charsets.UTF_8)
+        }
+        val legacy = p.getString("backendPassword", null) ?: return null
+        prefs().edit()
+            .putString("passwordEnc", hexOf(dev.gbcode.app.connection.CredentialStore.encrypt(
+                passwordAlias, legacy.toByteArray(Charsets.UTF_8))))
+            .remove("backendPassword")
+            .apply()
+        return legacy
     }
 
     fun clearPairedState() {
