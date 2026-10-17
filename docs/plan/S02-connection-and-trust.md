@@ -87,8 +87,10 @@ Dependencies below are effective for the stated profile, not stage-number order.
 - [ ] Choose direct verified origin or app-local gateway based on the measured WebView/TLS constraints.
 - [ ] For a gateway, implement bounded HTTP/WS proxying, authentication, streaming and origin-preserving routes; never arbitrary target proxying.
 - [ ] Test service workers, extension webviews, port collisions, cookie host scope and offline resources under the chosen topology.
+  - Evidence (workstation lane, 2026-10-17): code-server 4.141.0 serves webview/notebook resources through its scoped service worker with `vscode-cdn.net` unresolvable; notebook rendered and executed offline. Mechanism, registrations, and residual risks: `docs/audit/E12-webview-resource-origin.md`. Open: gateway topology re-test, cookie/localhost scopes, egress deny for `*.vscode-cdn.net`.
 
 - [ ] Audit the pinned backend's webview-origin patches, service-worker behavior and parent validation. Prove that an untrusted extension frame and a forwarded development app cannot inherit the native bridge even when resource hosts coincide.
+  - Evidence: source + behavior audit in `docs/audit/E12-webview-resource-origin.md`; native-bridge main-frame-only rule remains a design constraint and must be proven in the APK lane.
 
 **Accept:** No SSL bypass or origin flattening is required; extension webviews and authenticated reconnect remain functional.
 

@@ -57,7 +57,7 @@ The provisional choice stands: current upstream, active maintenance, verified di
 ## Consequences
 
 - S02 origin/gateway work targets code-server 4.141.0 behavior first; patch inventory in `upstream/patches/` tracks any project-owned changes with removal conditions.
-- Required audits before production: webview-origin isolation (E12), remote-secret-storage plaintext fallback (E13), product.json/build overrides (E11), `--disable-getting-started-override` and branding deltas for U03.02.
+- Required audits before production: webview-origin isolation (E12 — mechanism audit in `docs/audit/E12-webview-resource-origin.md`; live allowlist probe and fail-closed network policy still open), remote-secret-storage plaintext fallback (E13), product.json/build overrides (E11), `--disable-getting-started-override` and branding deltas for U03.02.
 - Upgrade/rollback: candidate updates only via `versions.lock.json` change + full conformance re-run + emulator slice re-run; the previous pin stays usable until the new one passes.
 
 ## Reopen triggers
