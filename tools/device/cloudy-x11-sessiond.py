@@ -115,7 +115,7 @@ class Sessions:
                 f.write(f"exec {command}\n")
             os.chmod(wrapper, 0o700)
             cmd = [
-                "xpra", "start", f":{display}", "--daemon=yes",
+                "xpra", "start-desktop", f":{display}", "--daemon=yes",
                 f"--bind-tcp=127.0.0.1:{xpra_port}", "--html=on",
                 "--tcp-auth=none", "--mdns=no", "--notifications=no",
                 f"--xvfb={xvfb}", f"--dpi={self.dpi}",
@@ -139,8 +139,20 @@ class Sessions:
                 raise RuntimeError("xpra did not listen")
             app_env = os.environ.copy()
             app_env["DISPLAY"] = f":{display}"
+            rc = os.path.join(self.base, "openbox-rc.xml")
+            with open(rc, "w") as f:
+                f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
+                        '<openbox_config xmlns="http://openbox.org/3.4/rc">\n'
+                        '  <applications>\n'
+                        '    <application class="*"><decor>no</decor></application>\n'
+                        '  </applications>\n'
+                        '</openbox_config>\n')
             app_log_path = os.path.join(self.base, f"x11-app-{display}.log")
             app_log = open(app_log_path, "ab")
+            wm = subprocess.Popen(["/usr/bin/openbox", "--config-file", rc],
+                                  env=app_env, stdout=app_log, stderr=app_log,
+                                  start_new_session=True)
+            time.sleep(0.7)
             app = subprocess.Popen(["/bin/sh", wrapper], env=app_env,
                                    stdout=app_log, stderr=app_log,
                                    start_new_session=True)
@@ -170,7 +182,7 @@ class Sessions:
                     "port": proxy_port, "xpra_port": xpra_port,
                     "width": w, "height": h, "command": command,
                     "wrapper": wrapper, "app_pid": app.pid,
-                    "fit_stop": fit_stop}
+                    "wm_pid": wm.pid, "fit_stop": fit_stop}
             self.sessions[sid] = info | {"proxy_pid": proxy.pid}
             return {k: info[k] for k in ("id", "name", "display", "port")}
 
@@ -221,6 +233,9 @@ class Sessions:
                                    env=env, timeout=3)
                     subprocess.run(["/usr/bin/xdotool", "windowsize", best, str(w), str(h)],
                                    env=env, timeout=3)
+                    subprocess.run(["/usr/bin/xdotool", "windowstate", "--add",
+                                    "MAXIMIZED_VERT", "--add", "MAXIMIZED_HORZ", best],
+                                   env=env, timeout=3)
                     if last != (w, h):
                         log.write(f"[fit] window {best} ({best_area}px) -> {w}x{h}\n")
                         last = (w, h)
@@ -242,6 +257,10 @@ class Sessions:
             try:
                 os.killpg(os.getpgid(info["app_pid"]), signal.SIGTERM)
             except OSError:
+                pass
+            try:
+                os.kill(info["wm_pid"], signal.SIGTERM)
+            except (OSError, KeyError):
                 pass
             try:
                 subprocess.run(["xpra", "stop", info["display"]],
