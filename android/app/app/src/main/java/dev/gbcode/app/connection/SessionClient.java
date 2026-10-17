@@ -35,8 +35,12 @@ public final class SessionClient {
         return keyPair;
     }
 
-    /** Pair once; returns the enrolled app hash. */
-    public String pair(String pairingSecret, String nonce) throws Exception {
+    /**
+     * Pair once and verify the signed enrollment receipt before trusting it.
+     * Returns the full enrolled app hash (contract: hex SHA-256 of the app key),
+     * never a display truncation.
+     */
+    public PairResult pair(String pairingSecret, String nonce) throws Exception {
         JSONObject resp = call("POST", "/pair", new JSONObject()
                 .put("v", 1)
                 .put("pairingSecret", pairingSecret)
@@ -46,7 +50,88 @@ public final class SessionClient {
         if (resp.getInt("__status") != 200) {
             throw new IllegalStateException("pair failed: " + resp);
         }
-        return resp.getString("enrolledApp");
+        String appHash = resp.getString("enrolledApp");
+        String serverPublicKey = resp.getString("serverPublicKey");
+        String fingerprint = resp.getString("serverFingerprint");
+        byte[] receiptSig = b64uDecode(resp.getString("receiptSig"));
+
+        return verifyReceipt(keyPair.publicKey, nonce, appHash, serverPublicKey,
+                fingerprint, receiptSig);
+    }
+
+    /**
+     * Verify a signed enrollment receipt (contracts/session-v1.md §2):
+     * ed25519(serverKey, "enroll" || appHash || nonce), appHash = SHA-256(app
+     * key), fingerprint = SHA-256(server key). Exposed for golden-vector tests.
+     */
+    static PairResult verifyReceipt(byte[] appPublicKey, String nonce,
+                                    String appHash, String serverPublicKey,
+                                    String fingerprint, byte[] receiptSig) {
+        // The enrolled hash must be our app identity: SHA-256(raw app public key).
+        byte[] expectedHash = sha256(appPublicKey);
+        if (!hex(expectedHash).equals(appHash)) {
+            throw new SecurityException("enrollment receipt binds a different app key");
+        }
+        // The reported fingerprint must match the server public key it signs with.
+        byte[] serverRaw = b64uDecode(serverPublicKey);
+        if (serverRaw.length != 32) {
+            throw new SecurityException("server public key length");
+        }
+        if (!hex(sha256(serverRaw)).equals(fingerprint)) {
+            throw new SecurityException("server fingerprint does not match serverPublicKey");
+        }
+        // Signed receipt: ed25519(serverKey, "enroll" || appHash || nonce).
+        byte[] message = concat("enroll".getBytes(StandardCharsets.UTF_8),
+                expectedHash, nonce.getBytes(StandardCharsets.UTF_8));
+        if (!Ed25519.verify(serverRaw, receiptSig, message)) {
+            throw new SecurityException("enrollment receipt signature invalid");
+        }
+        return new PairResult(appHash, serverPublicKey, fingerprint, nonce);
+    }
+
+    /** Verified enrollment result; the receipt fields are covered by receiptSig. */
+    public static final class PairResult {
+        public final String appHash;
+        public final String serverPublicKey;
+        public final String serverFingerprint;
+        public final String nonce;
+
+        PairResult(String appHash, String serverPublicKey, String serverFingerprint, String nonce) {
+            this.appHash = appHash;
+            this.serverPublicKey = serverPublicKey;
+            this.serverFingerprint = serverFingerprint;
+            this.nonce = nonce;
+        }
+    }
+
+    private static byte[] b64uDecode(String data) {
+        return java.util.Base64.getUrlDecoder().decode(data);
+    }
+
+    private static byte[] sha256(byte[] data) {
+        try {
+            return java.security.MessageDigest.getInstance("SHA-256").digest(data);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static String hex(byte[] data) {
+        StringBuilder sb = new StringBuilder(data.length * 2);
+        for (byte b : data) sb.append(String.format("%02x", b));
+        return sb.toString();
+    }
+
+    private static byte[] concat(byte[]... parts) {
+        int total = 0;
+        for (byte[] p : parts) total += p.length;
+        byte[] out = new byte[total];
+        int off = 0;
+        for (byte[] p : parts) {
+            System.arraycopy(p, 0, out, off, p.length);
+            off += p.length;
+        }
+        return out;
     }
 
     /** Get a session token for the enrolled app. */
@@ -102,9 +187,14 @@ public final class SessionClient {
     /** Full flow: pair → session → channel hello over WebSocket. */
     public JSONObject fullFlow(String pairingSecret, String nonce) throws Exception {
         JSONObject out = new JSONObject();
-        String appHash = pair(pairingSecret, nonce);
-        out.put("enrolledApp", appHash.substring(0, 16) + "…");
-        String session = session(appHash);
+        PairResult paired = pair(pairingSecret, nonce);
+        // Full hash is the identity used for /session/challenge; display code
+        // may truncate, persistence must not.
+        out.put("enrolledApp", paired.appHash);
+        out.put("serverPublicKey", paired.serverPublicKey);
+        out.put("serverFingerprint", paired.serverFingerprint);
+        out.put("receiptVerified", true);
+        String session = session(paired.appHash);
         out.put("sessionPrefix", session.substring(0, 12) + "…");
 
         String host = base.substring(base.indexOf("://") + 3);

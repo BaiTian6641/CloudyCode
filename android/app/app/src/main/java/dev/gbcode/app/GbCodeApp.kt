@@ -44,6 +44,7 @@ class GbCodeApp : Application() {
         val daemonBase: String,
         val workbenchBase: String,
         val fingerprint: String,
+        val serverPublicKey: String,
         val backendPassword: String? = null,
     )
 
@@ -61,6 +62,7 @@ class GbCodeApp : Application() {
             .putString("daemon", state.daemonBase)
             .putString("workbench", state.workbenchBase)
             .putString("fingerprint", state.fingerprint)
+            .putString("serverPublicKey", state.serverPublicKey)
             .putString("backendPassword", state.backendPassword)
             .apply()
         backendPassword = state.backendPassword
@@ -73,11 +75,12 @@ class GbCodeApp : Application() {
         val daemon = p.getString("daemon", null) ?: return null
         val workbench = p.getString("workbench", null) ?: return null
         val fp = p.getString("fingerprint", "") ?: ""
+        val serverPublicKey = p.getString("serverPublicKey", null) ?: return null
         val seedBytes = dev.gbcode.app.connection.CredentialStore.decrypt(
             seedEnc.chunked(2).map { it.toInt(16).toByte() }.toByteArray())
         val seedHex = seedBytes.joinToString("") { "%02x".format(it) }
         return PairedState(seedHex, appHash, daemon, workbench, fp,
-            p.getString("backendPassword", null))
+            serverPublicKey, p.getString("backendPassword", null))
     }
 
     fun clearPairedState() {

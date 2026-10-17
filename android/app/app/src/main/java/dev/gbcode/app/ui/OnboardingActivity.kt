@@ -113,10 +113,17 @@ class OnboardingActivity : Activity() {
         executor.execute {
             try {
                 val client = SessionClient(daemonBase)
-                val result: JSONObject = client.fullFlow(secret,
-                    "nonce-onboard-" + System.currentTimeMillis())
-                val fingerprint = result.getJSONObject("hello")
-                    .getJSONObject("payload").getString("fingerprint")
+                val nonceBytes = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+                val nonce = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(nonceBytes)
+                val result: JSONObject = client.fullFlow(secret, nonce)
+                // fullFlow verified the signed enrollment receipt; the channel
+                // hello must agree with the signed fingerprint.
+                val fingerprint = result.getString("serverFingerprint")
+                val helloFingerprint = result.optJSONObject("hello")
+                    ?.optJSONObject("payload")?.optString("fingerprint")
+                if (helloFingerprint != null && helloFingerprint != fingerprint) {
+                    throw SecurityException("channel fingerprint differs from signed receipt")
+                }
                 runOnUiThread {
                     app.setState(ConnectionState.PAIRED, fingerprint)
                     app.backendBaseUrl = workbenchBase
@@ -127,10 +134,11 @@ class OnboardingActivity : Activity() {
                         daemonBase = daemonBase,
                         workbenchBase = workbenchBase,
                         fingerprint = fingerprint,
+                        serverPublicKey = result.getString("serverPublicKey"),
                         backendPassword = passwordField.text.toString().ifEmpty { null },
                     ))
                     app.setState(ConnectionState.CONNECTED)
-                    log("paired; server fingerprint:\n$fingerprint")
+                    log("paired; enrollment receipt verified; server fingerprint:\n$fingerprint")
                     openWorkbench()
                 }
             } catch (e: Exception) {
