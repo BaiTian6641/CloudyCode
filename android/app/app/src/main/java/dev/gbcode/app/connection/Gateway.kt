@@ -384,10 +384,11 @@ class Gateway @JvmOverloads constructor(
         return "default-src 'none'; " +
                 "script-src 'self' 'unsafe-eval' blob: 'nonce-$nonce'; " +
                 "style-src 'self' 'unsafe-inline'; " +
-                "img-src 'self' data: blob:; " +
+                "img-src 'self' data: blob: https://open-vsx.org https://*.open-vsx.org " +
+                "https://openvsx.eclipsecontent.org; " +
                 "font-src 'self' data:; " +
                 "media-src 'self' data: blob:; " +
-                "connect-src 'self' $ws blob: data:; " +
+                "connect-src 'self' $ws blob: data: https://open-vsx.org https://*.open-vsx.org; " +
                 "worker-src 'self' blob:; " +
                 "frame-src 'self' blob: data:; " +
                 "child-src 'self' blob:; " +

@@ -111,6 +111,27 @@ object WorkbenchPage {
         // overrides productService.webviewContentExternalBaseUrlTemplate
         // (environmentService.webviewExternalEndpoint precedence).
         if (!webviewEndpoint.isNullOrEmpty()) cfg.put("webviewEndpoint", webviewEndpoint)
+        // The OSS product.json carries no extension gallery, so the app-owned
+        // workbench would show an empty Extensions view while the code-server
+        // backend (which injects its own product) showed one. Configure the
+        // Open VSX gallery through the supported web product hook. Microsoft's
+        // Marketplace is not licensed for non-Microsoft products; Open VSX plus
+        // VSIX sideloading is the supported path.
+        cfg.put("productConfiguration", org.json.JSONObject()
+            .put("nameShort", "Cloudy Code")
+            .put("nameLong", "Cloudy Code")
+            .put("applicationName", "cloudy-code")
+            .put("extensionsGallery", org.json.JSONObject()
+                .put("serviceUrl", "https://open-vsx.org/vscode/gallery")
+                .put("itemUrl", "https://open-vsx.org/vscode/item")
+                .put("publisherUrl", "https://open-vsx.org/publisher")
+                .put("resourceUrlTemplate",
+                    "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}")
+                .put("controlUrl",
+                    "https://raw.githubusercontent.com/EclipseFdn/publish-extensions/master/extension-control/extensions.json")
+                .put("nlsBaseUrl", "https://open-vsx.org/vscode/nls")
+            ))
+
         // Must be '/' (or omitted): the client computes
         // posix.join(serverBasePath, '<quality>-<commit>'), and an empty string
         // yields a path without the leading slash -> invalid WebSocket URL
