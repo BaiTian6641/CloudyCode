@@ -66,6 +66,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 - [ ] Reuse actual upstream main surfaces without replacement dashboard, simplified mobile UI or forced hardware sidebar.
 - [ ] Implement only needed Android shell/branding/platform hooks and record each frontend patch with rationale.
 - [ ] Verify Explorer, Search, SCM, Run/Debug, Extensions, terminals, settings, profiles and split editors against the control.
+  - Baseline published: `docs/compatibility/workbench-delta-inventory.md` (measured deltas + dispositions; branding/gallery/agent/telemetry items still open).
 - [ ] Place connection/device actions in standard commands/status/Quick Pick and native permission dialogs.
 
 **Accept:** The main application is the upstream workbench; approved platform differences are explicit and no required surface is missing.
