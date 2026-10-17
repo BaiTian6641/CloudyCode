@@ -29,12 +29,14 @@ class ConnectionOverlay(activity: Activity, parent: FrameLayout) {
     private val progress: View = view.findViewById(R.id.overlayProgress)
     private val actions: View = view.findViewById(R.id.overlayActions)
     private val showOptions: Button = view.findViewById(R.id.showOptions)
+    private val attachCancel: Button = view.findViewById(R.id.attachCancel)
 
     var onRetry: () -> Unit = {}
     var onOpenTerminal: () -> Unit = {}
     var onCopyCommand: () -> Unit = {}
     var onAdvanced: () -> Unit = {}
     var onOffline: () -> Unit = {}
+    var onCancelAttach: () -> Unit = {}
 
     init {
         parent.addView(view, FrameLayout.LayoutParams(
@@ -45,6 +47,7 @@ class ConnectionOverlay(activity: Activity, parent: FrameLayout) {
         view.findViewById<Button>(R.id.copyCommand).setOnClickListener { onCopyCommand() }
         view.findViewById<Button>(R.id.advancedSetup).setOnClickListener { onAdvanced() }
         view.findViewById<Button>(R.id.offlineWorkbench).setOnClickListener { onOffline() }
+        attachCancel.setOnClickListener { onCancelAttach() }
         showOptions.setOnClickListener {
             actions.visibility = View.VISIBLE
             showOptions.visibility = View.GONE
@@ -60,6 +63,25 @@ class ConnectionOverlay(activity: Activity, parent: FrameLayout) {
     }
 
     val isVisible: Boolean get() = view.visibility == View.VISIBLE
+
+    fun showSearching() {
+        render(
+            titleText = "Looking for the Linux workspace",
+            detailText = "Waiting for the backend to appear. You can keep working offline; " +
+                "the workspace attaches automatically when it is found.",
+            unavailable = false,
+        )
+        attachCancel.visibility = View.GONE
+    }
+
+    fun showAttaching(kind: String) {
+        render(
+            titleText = "Linux workspace found",
+            detailText = "Attaching to the $kind backend…",
+            unavailable = false,
+        )
+        attachCancel.visibility = View.VISIBLE
+    }
 
     fun showReconnecting(reason: String? = null) {
         render(
@@ -112,6 +134,7 @@ class ConnectionOverlay(activity: Activity, parent: FrameLayout) {
         progress.visibility = if (unavailable) View.GONE else View.VISIBLE
         actions.visibility = if (unavailable) View.VISIBLE else View.GONE
         showOptions.visibility = if (unavailable) View.GONE else View.VISIBLE
+        attachCancel.visibility = View.GONE
     }
 
     private fun animationsEnabled(): Boolean =

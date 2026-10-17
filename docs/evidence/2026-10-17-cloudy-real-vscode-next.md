@@ -139,6 +139,20 @@ sudo usbip attach -r 127.0.0.1 -b cloudy-303a-1001
 
 Limits: only the Espressif device is exported for now; isochronous transfers unsupported; if the VM kernel lacks `vhci_hcd` or module loading is blocked, the transparent path is unavailable and the serial lane remains. Bulk OUT/control OUT and interrupt paths are implemented but not yet exercised against a class driver.
 
+## Frontend auto-detection and attach (2026-10-17)
+
+The workbench now watches for backends independently of the launch screen:
+
+- Every 4 s (2 s while a surface is visible) it probes `8085` (pinned Cloudy) and `8080` (code-server) off the main thread.
+- **Local/offline workbench** (`upstream == null`): when a backend appears, `ConnectionOverlay` shows **Linux workspace found → Attaching…** with a "Stay offline" cancel; after 1.8 s the app switches (`startActivity` with an `attaching` hint, so the Cloudy overlay covers the reload instead of a white flash). The new activity keeps the overlay until the first `onPageFinished`.
+- **Attached to code-server** and `8085` appears: a non-blocking Cloudy **banner** offers "Cloudy Code backend available (recommended)" with Switch / Not now.
+- **Attached but its backend is down** and the other backend answers: automatic switch with the same attaching surface.
+- The startup screen already prefers `8085` then `8080` at launch.
+
+Verified on the emulator: with the workbench in offline mode, starting a real code-server and exposing it (`adb reverse 8080`) made the app detect it and attach; the WebView became `Welcome - code-server` with assets proxied through the app gateway. (The shared emulator's other app stole focus during the later overlay/banner capture, so those two visuals are implemented but not screenshotted yet.)
+
+Design: all surfaces reuse the Cloudy tokens/typography/radii from `ConnectionOverlay`; the banner uses the same card surface, primary "Switch" action and text "Not now".
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).

@@ -101,6 +101,15 @@
             </LinearLayout>
 
             <Button
+                android:id="@+id/attachCancel"
+                style="@style/Cloudy.Button.Text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Stay offline"
+                android:visibility="gone" />
+
+            <Button
                 android:id="@+id/showOptions"
                 style="@style/Cloudy.Button.Text"
                 android:layout_width="wrap_content"

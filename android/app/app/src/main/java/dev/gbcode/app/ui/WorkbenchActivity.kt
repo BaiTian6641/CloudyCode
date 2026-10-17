@@ -51,6 +51,19 @@ class WorkbenchActivity : Activity() {
     private var pageErrored = false
     private var origin: String? = null
 
+    // Auto-detection: attach to a backend that appears while the workbench is
+    // local, switch backends when the current one is down, and offer the
+    // preferred backend non-blockingly while another one is healthy.
+    private var mode = MODE_LOCAL
+    private var discoveryRunning = false
+    private var bannerShown = false
+    private var stayOffline = false
+    private var attachTarget: Int? = null
+    private var banner: BackendBanner? = null
+    private val discoveryExec = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "cloudy-backend-discovery").apply { isDaemon = true }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,6 +140,12 @@ class WorkbenchActivity : Activity() {
         }
         val origin = "http://127.0.0.1:${gateway!!.port}"
         this.origin = origin
+        mode = when {
+            upstreamHost == null -> MODE_LOCAL
+            installedFrontend -> MODE_REH
+            else -> MODE_CS
+        }
+        val attaching = intent.getBooleanExtra(EXTRA_ATTACHING, false)
 
         if (BuildConfig.DEBUG) {
             // Debug-only: allow CDP inspection of the workbench WebView for
@@ -148,6 +167,7 @@ class WorkbenchActivity : Activity() {
         webView!!.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
                 android.util.Log.i("GBCodeWorkbench", "page finished: $url")
+                if (attaching) overlay?.hide()
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest,
@@ -177,13 +197,20 @@ class WorkbenchActivity : Activity() {
         root.addView(webView, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setContentView(root)
+        banner = BackendBanner(this, root).apply {
+            onSwitch = { scheduleAttach(REH_WEB_PORT, "reh-web") }
+            onDismiss = { }
+        }
         overlay = ConnectionOverlay(this, root).apply {
             onRetry = { retryNow() }
+            onCancelAttach = { cancelAttach() }
             onOpenTerminal = { openTerminalApp() }
             onCopyCommand = { copySetupCommand() }
             onAdvanced = { startActivity(Intent(this@WorkbenchActivity, OnboardingActivity::class.java)) }
             onOffline = { openOfflineWorkbench() }
         }
+
+        if (attaching) overlay?.showAttaching("Linux workspace")
 
         // The backend credential stays native: we log in through the gateway
         // from app code and hand the WebView only the session cookie(s).
@@ -208,11 +235,15 @@ class WorkbenchActivity : Activity() {
     override fun onResume() {
         super.onResume()
         startMonitor()
+        startDiscovery()
     }
 
     override fun onPause() {
         monitorRunning = false
+        discoveryRunning = false
         monitor.removeCallbacks(monitorRunnable)
+        monitor.removeCallbacks(discoveryRunnable)
+        monitor.removeCallbacks(attachRunnable)
         super.onPause()
     }
 
@@ -325,6 +356,71 @@ class WorkbenchActivity : Activity() {
         }
     }
 
+    private fun startDiscovery() {
+        if (discoveryRunning) return
+        discoveryRunning = true
+        monitor.postDelayed(discoveryRunnable, 1500)
+    }
+
+    private val discoveryRunnable: Runnable = object : Runnable {
+        override fun run() {
+            if (!discoveryRunning) return
+            discoveryExec.execute {
+                val rehUp = portOpen("127.0.0.1", REH_WEB_PORT)
+                val csUp = portOpen("127.0.0.1", CODE_SERVER_PORT)
+                runOnUiThread {
+                    if (!discoveryRunning) return@runOnUiThread
+                    if (attachTarget == null) {
+                        when {
+                            mode == MODE_LOCAL && !stayOffline && rehUp ->
+                                scheduleAttach(REH_WEB_PORT, "reh-web")
+                            mode == MODE_LOCAL && !stayOffline && csUp ->
+                                scheduleAttach(CODE_SERVER_PORT, "code-server")
+                            mode == MODE_CS && rehUp && !bannerShown -> {
+                                bannerShown = true
+                                banner?.show("Cloudy Code backend available (recommended)")
+                            }
+                            mode == MODE_REH && !rehUp && csUp ->
+                                scheduleAttach(CODE_SERVER_PORT, "code-server")
+                            mode == MODE_CS && !csUp && rehUp ->
+                                scheduleAttach(REH_WEB_PORT, "reh-web")
+                        }
+                    }
+                    monitor.postDelayed(this, if (overlay?.isVisible == true) 2000 else 4000)
+                }
+            }
+        }
+    }
+
+    private fun scheduleAttach(port: Int, kind: String) {
+        attachTarget = port
+        overlay?.showAttaching(if (kind == "reh-web") "Cloudy Code" else "code-server")
+        monitor.postDelayed(attachRunnable, 1800)
+    }
+
+    private val attachRunnable = Runnable {
+        val port = attachTarget ?: return@Runnable
+        attachTo(port, if (port == REH_WEB_PORT) "reh-web" else "code-server")
+    }
+
+    private fun attachTo(port: Int, kind: String) {
+        val app = application as GbCodeApp
+        app.backendBaseUrl = "http://127.0.0.1:$port"
+        app.backendKind = kind
+        app.backendPassword = if (kind == "reh-web") app.connectionToken() else null
+        app.guestFolder = null
+        app.setState(dev.gbcode.app.ConnectionState.CONNECTED)
+        startActivity(Intent(this, WorkbenchActivity::class.java).putExtra(EXTRA_ATTACHING, true))
+        finish()
+    }
+
+    private fun cancelAttach() {
+        attachTarget = null
+        stayOffline = true
+        monitor.removeCallbacks(attachRunnable)
+        overlay?.hide()
+    }
+
     /**
      * POST the backend login form through the gateway and install the returned
      * session cookie(s) with their attributes intact. Returns how many cookie
@@ -374,7 +470,11 @@ class WorkbenchActivity : Activity() {
 
     override fun onDestroy() {
         monitorRunning = false
+        discoveryRunning = false
         monitor.removeCallbacks(monitorRunnable)
+        monitor.removeCallbacks(discoveryRunnable)
+        monitor.removeCallbacks(attachRunnable)
+        discoveryExec.shutdownNow()
         probeExec.shutdownNow()
         webView?.destroy()
         gateway?.close()
@@ -387,6 +487,12 @@ class WorkbenchActivity : Activity() {
         // process restarts; Gateway falls back to an ephemeral port (and logs it)
         // if another process already owns this one — it never routes through it.
         const val PREFERRED_GATEWAY_PORT = 41873
+        const val REH_WEB_PORT = 8085
+        const val CODE_SERVER_PORT = 8080
+        const val MODE_LOCAL = 0
+        const val MODE_REH = 1
+        const val MODE_CS = 2
+        const val EXTRA_ATTACHING = "attaching"
 
         /** Sustained outage before recovery actions replace the progress state. */
         const val UNAVAILABLE_AFTER_MS = 15_000L
