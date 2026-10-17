@@ -101,6 +101,9 @@ class StartupActivity : Activity() {
             startActivity(Intent(this, OnboardingActivity::class.java))
             finish()
         }
+        findViewById<Button>(R.id.usbDevices).setOnClickListener {
+            startActivity(Intent(this, UsbInventoryActivity::class.java))
+        }
 
         // Productive column: prose stays within a readable measure on wide
         // Googlebook windows instead of stretching edge to edge.

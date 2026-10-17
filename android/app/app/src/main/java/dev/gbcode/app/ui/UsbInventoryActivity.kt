@@ -34,6 +34,14 @@ class UsbInventoryActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var requestButton: Button
     private lateinit var claimReadButton: Button
+    private lateinit var startBridge: Button
+    private lateinit var stopBridge: Button
+    private lateinit var copyBridge: Button
+    private lateinit var bridgeStatus: TextView
+    private val token: String by lazy {
+        intent.getStringExtra("token")
+            ?: (application as dev.gbcode.app.GbCodeApp).connectionToken()
+    }
 
     private val usb by lazy { getSystemService(Context.USB_SERVICE) as UsbManager }
     private var target: UsbDevice? = null
@@ -94,10 +102,35 @@ class UsbInventoryActivity : Activity() {
             isEnabled = false
             setOnClickListener { claimAndRead() }
         }
+        bridgeStatus = TextView(this).apply {
+            text = "Bridge: ${dev.gbcode.app.SerialBridgeService.state}"
+            textSize = 13f
+            setTextColor(Color.parseColor("#909090"))
+            setPadding(0, 12, 0, 4)
+        }
+        startBridge = Button(this).apply {
+            text = "Start serial forwarding"
+            setOnClickListener { startForwarding() }
+        }
+        stopBridge = Button(this).apply {
+            text = "Stop serial forwarding"
+            setOnClickListener {
+                startService(Intent(this@UsbInventoryActivity, dev.gbcode.app.SerialBridgeService::class.java)
+                    .setAction(dev.gbcode.app.SerialBridgeService.ACTION_STOP))
+            }
+        }
+        copyBridge = Button(this).apply {
+            text = "Copy guest bridge command"
+            setOnClickListener { copyGuestCommand() }
+        }
         root.addView(title)
         root.addView(status)
         root.addView(requestButton)
         root.addView(claimReadButton)
+        root.addView(bridgeStatus)
+        root.addView(startBridge)
+        root.addView(stopBridge)
+        root.addView(copyBridge)
         root.addView(scroll, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -110,6 +143,38 @@ class UsbInventoryActivity : Activity() {
         }
         receiverRegistered = true
         scan()
+        val handler = android.os.Handler(mainLooper)
+        handler.post(object : Runnable {
+            override fun run() {
+                bridgeStatus.text = "Bridge: ${dev.gbcode.app.SerialBridgeService.state}"
+                handler.postDelayed(this, 800)
+            }
+        })
+    }
+
+    private fun startForwarding() {
+        val device = target
+        if (device != null && !usb.hasPermission(device)) {
+            status.text = "Grant USB permission first; forwarding starts automatically after it."
+            requestPermission()
+            return
+        }
+        startForegroundService(Intent(this, dev.gbcode.app.SerialBridgeService::class.java)
+            .setAction(dev.gbcode.app.SerialBridgeService.ACTION_START)
+            .putExtra(dev.gbcode.app.SerialBridgeService.EXTRA_TOKEN, token))
+        status.text = "Forwarding requested; waiting for the guest bridge."
+    }
+
+    private fun copyGuestCommand() {
+        val script = assets.open("cloudy-serial-bridge.py").bufferedReader().use { it.readText() }
+        val command = "cat > ~/cloudy-serial-bridge.py <<'PY'\n$script\nPY\n" +
+            "python3 ~/cloudy-serial-bridge.py --token $token"
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE)
+            as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+            "Cloudy serial bridge", command))
+        status.text = "Guest command copied. Run it once in the Terminal, keep the Terminal " +
+            "open, then use rfc2217://127.0.0.1:7002 in esptool/PlatformIO/pyserial."
     }
 
     private fun scan() {

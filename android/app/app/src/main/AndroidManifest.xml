@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <!-- Only granted to a preinstalled/partner build (signature|preinstalled). -->
     <uses-permission android:name="com.android.virtualization.terminal.permission.MANAGE_TERMINAL" />
 
@@ -42,6 +44,10 @@
         <activity
             android:name=".ui.UsbInventoryActivity"
             android:exported="true" />
+        <service
+            android:name=".SerialBridgeService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
         <activity
             android:name=".ui.WorkbenchActivity"
             android:exported="false"

@@ -83,6 +83,34 @@ Guest probe command (read-only) to run once in the Terminal:
 command -v usbip; ls /sys/module/vhci_hcd >/dev/null 2>&1 && echo VHCI_LOADED; ls /lib/modules/$(uname -r)/kernel/drivers/usb/usbip 2>/dev/null; uname -r
 ```
 
+## Serial forwarding implemented end-to-end (2026-10-17)
+
+Serial lane for ESP32-S3 embedded work (explicitly not USB/IP or JTAG):
+
+| Piece | Role |
+|---|---|
+| `SerialBridgeService` (APK) | Foreground `connectedDevice` service; claims the CDC data interface; connects to the Terminal-forwarded guest port `127.0.0.1:7001`; authenticates with the app token (`CLOUDY-SERIAL 1 <token>`); relays framed data both ways and maps RFC2217 control bitmaps to CDC `SET_CONTROL_LINE_STATE` (DTR/RTS). |
+| `tools/device/cloudy-serial-bridge.py` (guest) | Listens on `0.0.0.0:7001` for the app (forwarded by the Terminal app), authenticates the token, then serves **RFC 2217** on `127.0.0.1:7002` with BINARY/COM-PORT negotiation and setting acknowledgements. |
+| Client tools | `esptool`/PlatformIO/pyserial use `rfc2217://127.0.0.1:7002` (upload and monitor). |
+
+Wire protocol: `[type:1][len:2 BE][payload]`; 0x01 app→guest data, 0x02 guest→app data, 0x03 control bitmap (bit0 DTR, bit1 RTS), 0x04 keepalive.
+
+Verified:
+
+1. Local bridge unit test with pyserial: negotiation completes, app→guest and guest→app data, control notifications.
+2. **Real board, full chain** (workstation bridge via `adb reverse` standing in for the VM port forward): app authenticated, pyserial opened `rfc2217://127.0.0.1:7002`, DTR/RTS toggles produced CDC control transfers in the app log (`dtr=1 rts=1`, `dtr=1 rts=0`, …), and a 2-byte write exercised the CDC OUT path. No data was read because the board emits nothing yet.
+3. USB permission/claim/read on the device (previous section).
+
+Usage in the VM (after copying "Copy guest bridge command" from the USB screen into the Terminal and tapping Start serial forwarding):
+
+```
+esptool --port rfc2217://127.0.0.1:7002 chip_id
+# PlatformIO: upload_port = rfc2217://127.0.0.1:7002
+#             monitor_port = rfc2217://127.0.0.1:7002
+```
+
+Limits: serial only (no JTAG or arbitrary USB devices); requires the Terminal app to stay open for the port forward; the app must hold the USB device (a second Android app cannot claim it concurrently). USB/IP + VHCI remains the transparent path for JTAG/PlatformIO debugging.
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).
