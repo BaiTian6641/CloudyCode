@@ -179,7 +179,10 @@ class SessionDaemon {
       } catch { ok = false; }
       if (!ok) return this.error(res, 403, "signature_invalid");
       const issued = this.tokens.issue(appHash, SESSION_TTL_MS);
-      this.json(res, 200, { v: 1, session: issued.token, expiresAt: issued.expiresAt });
+      // Authenticate the daemon to the app for this session (contract §3).
+      const serverProof = sign(this.identity.privateKey,
+        Buffer.from("serverprove"), Buffer.from(appHash, "hex"), Buffer.from(ch.nonce, "utf8"));
+      this.json(res, 200, { v: 1, session: issued.token, expiresAt: issued.expiresAt, serverProof: b64u(serverProof) });
     }).catch(() => this.error(res, 400, "bad_request"));
   }
 

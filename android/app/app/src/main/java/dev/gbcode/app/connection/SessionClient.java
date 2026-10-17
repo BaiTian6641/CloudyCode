@@ -134,8 +134,11 @@ public final class SessionClient {
         return out;
     }
 
-    /** Get a session token for the enrolled app. */
-    public String session(String appHash) throws Exception {
+    /**
+     * Get a session token for the enrolled app and authenticate the daemon by
+     * verifying serverProof against the key pinned at enrollment (contract §3).
+     */
+    public String session(String appHash, String serverPublicKey) throws Exception {
         JSONObject challenge = call("GET", "/session/challenge?app=" + appHash, null, null);
         if (challenge.getInt("__status") != 200) {
             throw new IllegalStateException("challenge failed: " + challenge);
@@ -152,7 +155,41 @@ public final class SessionClient {
         if (resp.getInt("__status") != 200) {
             throw new IllegalStateException("session failed: " + resp);
         }
-        return resp.getString("session");
+        String token = resp.getString("session");
+        verifyServerProof(serverPublicKey, appHash, ch, resp.optString("serverProof", ""));
+        return token;
+    }
+
+    /**
+     * Verify the per-session daemon proof:
+     * ed25519(serverKey, "serverprove" || appHash || challenge). Exposed for
+     * golden-vector tests; called by session() before the token may be used.
+     */
+    static void verifyServerProof(String serverPublicKey, String appHash,
+                                  String challenge, String serverProof) {
+        if (serverProof.isEmpty()) {
+            throw new SecurityException("session response missing serverProof");
+        }
+        byte[] serverRaw = b64uDecode(serverPublicKey);
+        if (serverRaw.length != 32) {
+            throw new SecurityException("server public key length");
+        }
+        byte[] message = concat("serverprove".getBytes(StandardCharsets.UTF_8),
+                hexToBytes(appHash), challenge.getBytes(StandardCharsets.UTF_8));
+        if (!Ed25519.verify(serverRaw, b64uDecode(serverProof), message)) {
+            throw new SecurityException("server proof invalid");
+        }
+    }
+
+    private static byte[] hexToBytes(String hex) {
+        if (hex.length() % 2 != 0) {
+            throw new SecurityException("app hash encoding");
+        }
+        byte[] out = new byte[hex.length() / 2];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = (byte) Integer.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+        }
+        return out;
     }
 
     private static String b64u(byte[] data) {
@@ -194,9 +231,14 @@ public final class SessionClient {
         out.put("serverPublicKey", paired.serverPublicKey);
         out.put("serverFingerprint", paired.serverFingerprint);
         out.put("receiptVerified", true);
-        String session = session(paired.appHash);
+        String session = session(paired.appHash, paired.serverPublicKey);
         out.put("sessionPrefix", session.substring(0, 12) + "…");
+        out.put("hello", channelHello(session));
+        return out;
+    }
 
+    /** Open the framed channel and exchange one hello; proves the token works. */
+    public JSONObject channelHello(String session) throws Exception {
         String host = base.substring(base.indexOf("://") + 3);
         int colon = host.lastIndexOf(':');
         String hostname = colon > 0 ? host.substring(0, colon) : host;
@@ -207,8 +249,7 @@ public final class SessionClient {
                     .getBytes(StandardCharsets.UTF_8);
             ws.sendText(new String(payload, StandardCharsets.UTF_8));
             WsClient.Frame frame = ws.receive();
-            out.put("hello", new JSONObject(new String(frame.payload, StandardCharsets.UTF_8)));
+            return new JSONObject(new String(frame.payload, StandardCharsets.UTF_8));
         }
-        return out;
     }
 }

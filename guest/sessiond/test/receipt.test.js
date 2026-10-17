@@ -109,3 +109,54 @@ test("full hash is required for challenge; truncated identity is unknown_app", a
   await server.closeAllConnections?.();
   await new Promise((r) => server.close(r));
 });
+
+test("session response carries a verifiable server proof", async () => {
+  const { daemon, server, port } = await setup();
+  const secret = daemon.openEnrollment();
+  const { status, body, app } = await pair(port, secret, "proof-nonce-1");
+  assert.equal(status, 200);
+  const appHash = body.enrolledApp;
+
+  const ch = await fetch(`http://127.0.0.1:${port}/session/challenge?app=${appHash}`);
+  assert.equal(ch.status, 200);
+  const challenge = (await ch.json()).challenge;
+
+  const msg = Buffer.concat([Buffer.from("session"), Buffer.from(challenge, "utf8")]);
+  const sig = crypto.sign(null, msg, app.privateKey);
+  const resp = await fetch(`http://127.0.0.1:${port}/session`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "connection": "close",
+      "X-GBCode-App": appHash,
+    },
+    body: JSON.stringify({ v: 1, challenge, appSig: b64u(sig) }),
+  });
+  assert.equal(resp.status, 200);
+  const session = await resp.json();
+  assert.ok(session.serverProof, "serverProof is required by contract §3");
+  assert.ok(session.session.startsWith("v1."));
+
+  const message = Buffer.concat([
+    Buffer.from("serverprove", "utf8"),
+    Buffer.from(appHash, "hex"),
+    Buffer.from(challenge, "utf8"),
+  ]);
+  const serverKey = publicKeyFromRaw(body.serverPublicKey);
+  assert.ok(
+    crypto.verify(null, message, serverKey, Buffer.from(session.serverProof, "base64url")),
+    "server proof must verify with the enrolled server key"
+  );
+  // Proof must be bound to this challenge and app identity (client-side checks).
+  const badChallenge = Buffer.concat([
+    Buffer.from("serverprove"), Buffer.from(appHash, "hex"), Buffer.from("other"),
+  ]);
+  const badApp = Buffer.concat([
+    Buffer.from("serverprove"), Buffer.alloc(32), Buffer.from(challenge, "utf8"),
+  ]);
+  assert.equal(crypto.verify(null, badChallenge, serverKey, Buffer.from(session.serverProof, "base64url")), false);
+  assert.equal(crypto.verify(null, badApp, serverKey, Buffer.from(session.serverProof, "base64url")), false);
+
+  await server.closeAllConnections?.();
+  await new Promise((r) => server.close(r));
+});

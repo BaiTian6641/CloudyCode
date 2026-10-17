@@ -11,6 +11,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import dev.gbcode.app.ConnectionState
 import dev.gbcode.app.GbCodeApp
+import dev.gbcode.app.connection.Ed25519
 import dev.gbcode.app.connection.SessionClient
 import org.json.JSONObject
 import java.util.concurrent.Executors
@@ -62,6 +63,11 @@ class OnboardingActivity : Activity() {
         pairButton.text = "Pair and connect"
         pairButton.setOnClickListener { startPairing(app) }
 
+        val reconnectButton = Button(this)
+        reconnectButton.text = "Reconnect saved identity"
+        reconnectButton.isEnabled = app.loadPairedState() != null
+        reconnectButton.setOnClickListener { authenticateRestored(app) }
+
         logView = TextView(this)
         logView.setPadding(24, 16, 24, 16)
         val scroll = ScrollView(this)
@@ -76,6 +82,7 @@ class OnboardingActivity : Activity() {
         root.addView(secretField)
         root.addView(passwordField)
         root.addView(pairButton)
+        root.addView(reconnectButton)
         root.addView(scroll, LinearLayout.LayoutParams(
 
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -92,11 +99,48 @@ class OnboardingActivity : Activity() {
         }
 
         app.addStateListener { state -> log("state: $state") }
-        if (app.connectionState == ConnectionState.CONNECTED || app.restoreFromPersisted()) {
-            app.setState(ConnectionState.CONNECTED)
-            log("restored pairing (fingerprint ${app.serverFingerprint})")
+        if (app.connectionState == ConnectionState.CONNECTED) {
             openWorkbench()
             return
+        }
+        if (app.restoreFromPersisted()) {
+            log("restored pairing (fingerprint ${app.serverFingerprint}); authenticating to the daemon …")
+            authenticateRestored(app)
+        }
+    }
+
+    /**
+     * Authenticated reconnect (S02.01): the stored identity must obtain a
+     * session whose serverProof verifies against the key pinned at enrollment,
+     * and the channel hello must carry that same fingerprint. CONNECTED is set
+     * only after the daemon proves its identity; failures stay on onboarding.
+     */
+    private fun authenticateRestored(app: GbCodeApp) {
+        app.setState(ConnectionState.CONNECTING)
+        executor.execute {
+            try {
+                val state = app.loadPairedState()
+                    ?: throw IllegalStateException("no paired identity stored")
+                val seed = state.seedHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                val client = SessionClient(state.daemonBase, Ed25519.fromSeed(seed))
+                val session = client.session(state.appHash, state.serverPublicKey)
+                val hello = client.channelHello(session)
+                val helloFingerprint = hello.optJSONObject("payload")?.optString("fingerprint")
+                if (helloFingerprint != null && helloFingerprint != state.fingerprint) {
+                    throw SecurityException("daemon identity changed since pairing")
+                }
+                runOnUiThread {
+                    app.setState(ConnectionState.CONNECTED, state.fingerprint)
+                    log("reconnected; daemon proof verified (fingerprint ${state.fingerprint})")
+                    openWorkbench()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    app.setState(ConnectionState.UNAVAILABLE)
+                    log("reconnect failed: ${e.message}")
+                    log("stored identity not trusted; the workbench stays closed. Pair and connect again after checking the daemon (a VM reset requires re-pairing).")
+                }
+            }
         }
     }
 

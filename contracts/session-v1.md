@@ -39,7 +39,9 @@
 ```json
 { "v": 1, "challenge": "<last server nonce from GET /session/challenge>", "appSig": "<base64url ed25519(appKey, 'session'|challenge)>" }
 ```
-Returns `{ "v": 1, "session": "<token>", "expiresAt": <unix ms> }`. Token format: `v1.<payload64>.<sig64>` where payload = `{app, iat, exp, sid}` and sig = HMAC-SHA-256(sessionSecret, payload) with a daemon-rotated secret. Default TTL 12h; revocation list survives restart (S09).
+Returns `{ "v": 1, "session": "<token>", "expiresAt": <unix ms>, "serverProof": "<base64url ed25519(serverKey, 'serverprove'|appKeyHash|challenge)>" }`. `serverProof` authenticates the daemon to the app on **every** session establishment (the enrollment receipt pins the key once; this re-proves possession per session, so a replaced daemon cannot replay a stale identity). Clients MUST verify `serverProof` against the server public key pinned at enrollment before using the token. This is an additive v1 field: peers that ignore unknown optional fields remain compatible (§6); `appKeyHash` here is the raw 32-byte hash, the same encoding as in the receipt.
+
+Token format: `v1.<payload64>.<sig64>` where payload = `{app, iat, exp, sid}` and sig = HMAC-SHA-256(sessionSecret, payload) with a daemon-rotated secret. Default TTL 12h; revocation list survives restart (S09).
 
 ## 4. Message channel (WebSocket)
 
