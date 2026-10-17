@@ -41,6 +41,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 - [ ] Implement SAF tree selection and persisted grants with a suggested, not hardcoded, dedicated directory.
 - [ ] Explain the separate Terminal folder grant and provide a visible checklist without attempting private permission delegation.
 - [ ] Handle cancellation, revoked access, read-only providers and unsupported roots.
+- [ ] Establish the workbench Workspace Trust decision explicitly during onboarding (never disable trust globally). Terminals, tasks and debug remain blocked in Restricted Mode until the user trusts the folder — surface that instead of hanging; evidence: `docs/evidence/2026-10-17-U03-terminal-trust-correction.md`.
 
 **Accept:** A user can complete or cancel setup without granting all-files access or losing existing files.
 
