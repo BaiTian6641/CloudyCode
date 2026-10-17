@@ -33,6 +33,12 @@ sudo apt-get install -y --no-install-recommends xpra xpra-x11 xpra-html5 xvfb x1
   exit 1
 }
 
+# The xpra package also ships a system xpra-server.socket/service that binds
+# 14500, which is our token proxy's forwarded port. They are unrelated to the
+# per-user seamless session on 14501; stop and disable them.
+sudo systemctl stop xpra-server.socket xpra-server.service 2>/dev/null || true
+sudo systemctl disable xpra-server.socket xpra-server.service 2>/dev/null || true
+
 cat > "$BASE/cloudy-x11-proxy.py" <<'PY'
 #!/usr/bin/env python3
 """Cloudy X11 proxy (guest side).
@@ -225,7 +231,7 @@ class Server(ThreadingHTTPServer):
 def main():
     ap = argparse.ArgumentParser(description="Cloudy X11 token proxy")
     ap.add_argument("--token-file", required=True)
-    ap.add_argument("--listen", default="0.0.0.0:14500")
+    ap.add_argument("--listen", default="127.0.0.1:14500")
     ap.add_argument("--upstream", default="127.0.0.1:14501")
     args = ap.parse_args()
     with open(args.token_file) as f:
