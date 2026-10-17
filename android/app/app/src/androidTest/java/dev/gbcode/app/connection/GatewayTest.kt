@@ -3,6 +3,7 @@ package dev.gbcode.app.connection
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -318,6 +319,39 @@ class GatewayTest {
         } finally {
             gw.close()
             try { server.close() } catch (_: Exception) {}
+        }
+    }
+
+    @Test
+    fun preferredPortBindsWhenFree() {
+        // Reserve a port, release it, then ask the gateway to bind exactly it.
+        val probe = ServerSocket().apply { bind(InetSocketAddress("127.0.0.1", 0)) }
+        val preferred = probe.localPort
+        probe.close()
+        val gw = Gateway("127.0.0.1", upstream!!.port)
+        try {
+            assertEquals(preferred, gw.start(preferred))
+        } finally {
+            gw.close()
+        }
+    }
+
+    @Test
+    fun occupiedPreferredPortFallsBack() {
+        val holder = ServerSocket().apply { bind(InetSocketAddress("127.0.0.1", 0)) }
+        try {
+            val gw = Gateway("127.0.0.1", upstream!!.port)
+            try {
+                val bound = gw.start(holder.localPort)
+                assertNotEquals(holder.localPort, bound)
+                // The fallback origin still serves the single upstream.
+                val body = URL("http://127.0.0.1:$bound/json").readText()
+                assertTrue(body.contains("\"ok\":true"))
+            } finally {
+                gw.close()
+            }
+        } finally {
+            holder.close()
         }
     }
 }

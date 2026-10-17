@@ -19,6 +19,16 @@ Validates ADR-0005's conflict rule on the emulator: preferred port taken → eph
 | Credential handling | The gateway never connected to the occupier; bind failed before any request. The backend credential is only used against the app's own gateway upstream |
 | Holder killed, app relaunched | Back on `http://127.0.0.1:41873`; tabs `test.ipynb`, `GBCode Conformance` restored (state bucket intact) |
 
+## Automated coverage
+
+| Suite | Result |
+|---|---|
+| `GatewayTest` (instrumented, `emulator-5554`) | **7/7 PASS** — includes new `preferredPortBindsWhenFree` (binds exactly the requested port) and `occupiedPreferredPortFallsBack` (falls back, still proxies the single upstream) |
+| `guest/sessiond` (`node --test test/*.test.js`) | 22/22 PASS |
+| `guest/gateway` (`node --test test/*.test.js`) | 5/5 PASS |
+
+Both package `test` scripts were changed from `node --test test/` (treated as a module on Node 22) to the explicit glob `node --test test/*.test.js`.
+
 ## Notes
 
 - Conflict can come from an **IPv6 wildcard** listener; the IPv4 bind fails with `EADDRINUSE` as expected. The fallback covers both families.

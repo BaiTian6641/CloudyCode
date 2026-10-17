@@ -5,7 +5,7 @@
   "description": "S02.03 loopback origin gateway prototype (fixed upstream HTTP+WS proxy).",
   "main": "src/gateway.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "license": "MIT"
 }

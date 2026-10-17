@@ -5,7 +5,7 @@
   "description": "GBCode guest session daemon (S02.02): pairing, sessions, framed channel. Node built-ins only.",
   "main": "src/server.js",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test test/*.test.js"
   },
   "license": "MIT"
 }
