@@ -234,6 +234,9 @@ class X11Activity : Activity() {
                         else if (auth == Auth.MISMATCH) showSetup(
                             "The X11 endpoint is running but rejected this app's token. Re-run " +
                                 "the setup from this window (Copy X11 setup command).")
+                        else if (auth == Auth.BAD_RESPONSE) showSetup(
+                            "The X11 endpoint answered but did not return the challenge. Another " +
+                                "service may own port 14500; re-run the setup from this window.")
                         else showSetup("Looking for the X11 server…")
                     }
                     handler.postDelayed(this, 2000)
@@ -242,7 +245,7 @@ class X11Activity : Activity() {
         }
     }
 
-    private enum class Auth { OK, UNREACHABLE, MISMATCH }
+    private enum class Auth { OK, UNREACHABLE, MISMATCH, BAD_RESPONSE }
 
     private fun authenticate(): Auth = try {
         val nonceBytes = ByteArray(16).also { SecureRandom().nextBytes(it) }
@@ -250,14 +253,19 @@ class X11Activity : Activity() {
         val conn = URL("$ORIGIN/__cloudy/ping?nonce=$nonce").openConnection() as HttpURLConnection
         conn.connectTimeout = 1500
         conn.readTimeout = 1500
-        val body = conn.inputStream.bufferedReader().use { it.readText() }.trim()
-        conn.disconnect()
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(token.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-        val expected = mac.doFinal(nonce.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
-        if (MessageDigest.isEqual(body.toByteArray(Charsets.UTF_8), expected.toByteArray(Charsets.UTF_8)))
-            Auth.OK else Auth.MISMATCH
+        if (conn.responseCode != 200) {
+            conn.disconnect()
+            Auth.BAD_RESPONSE
+        } else {
+            val body = conn.inputStream.bufferedReader().use { it.readText() }.trim()
+            conn.disconnect()
+            val mac = Mac.getInstance("HmacSHA256")
+            mac.init(SecretKeySpec(token.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+            val expected = mac.doFinal(nonce.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+            if (MessageDigest.isEqual(body.toByteArray(Charsets.UTF_8), expected.toByteArray(Charsets.UTF_8)))
+                Auth.OK else Auth.MISMATCH
+        }
     } catch (e: java.net.SocketTimeoutException) {
         Auth.UNREACHABLE
     } catch (e: java.net.ConnectException) {

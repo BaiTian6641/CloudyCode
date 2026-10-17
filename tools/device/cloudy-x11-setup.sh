@@ -118,8 +118,7 @@ class Handler(BaseHTTPRequestHandler):
     def _handle(self):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/__cloudy/ping":
-            if not self._cookie_ok():
-                return self._deny()
+            # No cookie: the challenge must never carry the secret it proves.
             nonce = urllib.parse.parse_qs(parsed.query).get("nonce", [""])[0]
             sig = hmac.new(self._token().encode(), nonce.encode(), hashlib.sha256).hexdigest()
             body = sig.encode()
@@ -189,10 +188,7 @@ class Handler(BaseHTTPRequestHandler):
             lk = k.lower()
             if lk in ("host", "cookie"):
                 continue
-            if lk == "upgrade" or lk.startswith("sec-websocket"):
-                lines.append(f"{k}: {v}")
-            else:
-                lines.append(f"{k}: {v}")
+            lines.append(f"{k}: {v}")
         lines.append(f"Host: {self.server.upstream_host}:{self.server.upstream_port}")
         upstream.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
 
@@ -248,7 +244,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 PY
 chmod +x "$BASE/cloudy-x11-proxy.py"
 

@@ -68,7 +68,7 @@ The first hardening round was re-reviewed and two **Critical** bypasses were fou
 
 Additional hardening: HTTP 401/403 and 5xx responses blank the WebView immediately (session takeover); the setup command clipboard entry is marked sensitive; polling pauses/resumes with the lifecycle; server loss blanks the page.
 
-Final verdict from the reviewer on must-fix items: cookie isolation (#2) and exported/launchMode (#4) **resolved**; VM bind/auth (#3) **resolved in substance** (xpra loopback-only; token-gated proxy the sole listener; the proxy still binds `0.0.0.0` because the Terminal forward target is unconfirmed — token-gated, documented); challenge/auth (#1) resolved after the two Critical fixes.
+Final verdict from the reviewer on must-fix items: cookie isolation (#2) and exported/launchMode (#4) **resolved**; VM bind/auth (#3) **resolved in substance** (xpra loopback-only; token-gated proxy the sole listener; the proxy binds `127.0.0.1:14500` because the Terminal forwarder exposes loopback listeners only — verified on-device); challenge/auth (#1) resolved after the two Critical fixes.
 
 Verification after the final fixes:
 
@@ -76,7 +76,23 @@ Verification after the final fixes:
 - App fail-closed with a **protocol-aware squatter** (returns a forged HMAC and a phishing page): the window shows the Cloudy setup card and never loads the page (`x11-fail-closed-protocol-aware.png`).
 - Authenticated WebView load was verified with a test token before the debug override was removed (same HMAC/load path); the release path now uses the real per-install token and the same proxy challenge. The proxy/HMAC unit tests and the protocol-aware squatter test cover the post-fix behavior; a live xpra/Firefox run remains the one-time VM setup test.
 
-Residuals (accepted/documented): proxy bound `0.0.0.0` but token-gated (guest loopback-only xpra); one-time setup token appears in the pasted command (clipboard marked sensitive; bash history note); a squatting server that seizes the port mid-session is caught by the ≤2 s re-auth/403 handling with a small race window; same-user VM processes can read the token or use `DISPLAY=:100` (inherent X11).
+Residuals (accepted/documented): the proxy binds loopback only (required for forwarding); one-time setup token appears in the pasted command (clipboard marked sensitive; bash history note); a squatting server that seizes the port mid-session is caught by the ≤2 s re-auth/403 handling with a small race window; same-user VM processes can read the token or use `DISPLAY=:100` (inherent X11).
+
+## Live end-to-end verification (2026-10-17)
+
+The live setup initially failed in three distinct ways, all fixed:
+
+1. **Terminal forwarder exposes loopback listeners only.** xpra on `127.0.0.1:14501` appeared on Android; the proxy on `0.0.0.0:14500` did not. The proxy now binds `127.0.0.1:14500`.
+2. **xpra's package-owned system socket/service also bind 14500.** `xpra-server.socket` (`[::]:14500`, systemd/PID 1) caused `EADDRINUSE` for the proxy and answered the app's challenge with 403. The setup now stops/disables `xpra-server.socket` and `xpra-server.service`; our per-user xpra remains on 14501.
+3. **The setup-embedded proxy drifted from the tested standalone.** Its `/__cloudy/ping` required the token cookie, but the app's challenge is deliberately cookie-free, so every probe returned 403 and the window stayed on "Looking…". The embedded copy is now byte-identical to `tools/device/cloudy-x11-proxy.py`; `tools/verify-x11-proxy.sh` asserts equality and a live cookie-free 200 + HMAC.
+
+Verified state:
+
+- Android listeners: `127.0.0.1:14500` (proxy) and `127.0.0.1:14501` (xpra); guest owners: `python3` proxy and `xpra` PID 524.
+- Host→device ping through the forwarder: HTTP 200 with the expected 64-hex HMAC.
+- App log: `CloudyX11: X11 client loaded: http://127.0.0.1:14500/`.
+- xpra session LIVE at `:100`; `pgrep -a firefox` → `978 firefox-esr`; the Cloudy X11 window rendered the Firefox window and a second X client window.
+- Rebuilt/installed app (`./tools/verify-x11-proxy.sh` green, `assembleDebug` green) and re-verified the load.
 
 ## Limits
 

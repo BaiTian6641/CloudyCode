@@ -185,7 +185,7 @@ class Server(ThreadingHTTPServer):
 def main():
     ap = argparse.ArgumentParser(description="Cloudy X11 token proxy")
     ap.add_argument("--token-file", required=True)
-    ap.add_argument("--listen", default="0.0.0.0:14500")
+    ap.add_argument("--listen", default="127.0.0.1:14500")
     ap.add_argument("--upstream", default="127.0.0.1:14501")
     args = ap.parse_args()
     with open(args.token_file) as f:

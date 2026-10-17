@@ -24,6 +24,9 @@ step "sessiond: protocol + authz + registry + vectors + fuzz"
 step "gateway: proxy/origin/WS/502"
 (cd guest/gateway && timeout 60 node --test) || fail=1
 
+step "x11 proxy: embedded sync + cookie-free HMAC"
+./tools/verify-x11-proxy.sh || fail=1
+
 step "probe APK builds"
 "$GRADLE" -p android/probes/network-probe :app:assembleDebug --console=plain -q || fail=1
 "$GRADLE" -p android/probes/workbench-slice :app:assembleDebug --console=plain -q || fail=1
