@@ -33,6 +33,8 @@ Workstation and emulator evidence (docs/evidence/2026-10-16-S01-*.md):
 | Language server (pyrefly semantic hover) | **PASS** — `def greet(name: str) -> str` at the call site, server-side `pyrefly lsp` | not run | PASS (control lane) |
 | Debug session (bundled js-debug, breakpoint pause) | **PASS** — paused at `debugger;`, adapter `watchdog.js` server-side | not run | PASS (control lane) |
 | Registry install (Extensions view → Open VSX gallery) | **PASS** — search, publisher trust, install, activation, theme applied | not run | VSIX lane + manual gallery config |
+| Tasks (`Tasks: Run Task` → build) | **PASS** — task executes, output on backend FS | not run | PASS (control lane) |
+| Source Control commit | **PASS** — message + Ctrl+Enter → real commit `e6602ce` | not run | not run |
 | Conformance extension (webview/CSP/tree/output/workspace.fs) | PASS | PASS | PASS |
 | Cold start median (this host) | 264 ms | not re-measured | 261 ms |
 | Structural parity vs control | Ports panel extra | older upstream baseline | reference |
