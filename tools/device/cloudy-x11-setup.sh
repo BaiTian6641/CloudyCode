@@ -275,14 +275,57 @@ RestartSec=2
 WantedBy=default.target
 UNIT
 
+cat > "$BASE/cloudy-x11-start.sh" <<SH
+#!/usr/bin/env bash
+# Manual X11 start (also used as a fallback when systemd user services fail).
+set -euo pipefail
+BASE="\$HOME/.local/share/cloudy"
+xpra stop :100 >/dev/null 2>&1 || true
+xpra start :100 --daemon=yes --bind-tcp=127.0.0.1:14501 --html=on \
+  --tcp-auth=none --mdns=no --notifications=no
+sleep 2
+if ! xpra list 2>/dev/null | grep -q ':100'; then
+  echo "xpra did not start; see: xpra list / journalctl --user -u cloudy-x11" >&2
+  exit 1
+fi
+if ! (echo > /dev/tcp/127.0.0.1/14500) 2>/dev/null; then
+  nohup python3 "\$BASE/cloudy-x11-proxy.py" --token-file "\$BASE/x11-token" \
+    --listen 0.0.0.0:14500 --upstream 127.0.0.1:14501 >"\$BASE/x11-proxy.log" 2>&1 &
+fi
+echo "X11 session up; run apps with: DISPLAY=:100 firefox &"
+SH
+chmod +x "$BASE/cloudy-x11-start.sh"
+
+cat > "$BASE/cloudy-x11-run" <<'SH'
+#!/usr/bin/env bash
+# Runs a command in the Cloudy X11 session and reports a clear error if it is down.
+set -euo pipefail
+if ! xpra list 2>/dev/null | grep -q ':100'; then
+  echo "No X11 session (:100). Start it with: ~/cloudy-x11-start.sh" >&2
+  xpra list >&2 || true
+  exit 1
+fi
+exec env DISPLAY=:100 "$@"
+SH
+chmod +x "$BASE/cloudy-x11-run"
+
 systemctl --user daemon-reload
-systemctl --user enable --now cloudy-x11.service cloudy-x11-proxy.service
+systemctl --user enable --now cloudy-x11.service cloudy-x11-proxy.service || true
 loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER" 2>/dev/null || true
 sleep 3
+if ! systemctl --user is-active cloudy-x11.service >/dev/null 2>&1; then
+  echo "systemd user unit not active; starting xpra directly"
+  "$BASE/cloudy-x11-start.sh" || true
+fi
 echo "== status =="
 systemctl --user --no-pager status cloudy-x11.service 2>/dev/null | head -8 || true
 systemctl --user --no-pager status cloudy-x11-proxy.service 2>/dev/null | head -8 || true
+echo "xpra sessions:"
+xpra list 2>/dev/null || true
+echo "X11 sockets:"
+ls -l /tmp/.X11-unix/ 2>/dev/null || true
 echo
 echo "Open GUI apps in the VM with:"
-echo "  DISPLAY=:100 firefox &"
+echo "  ~/cloudy-x11-run firefox &        (or DISPLAY=:100 firefox &)"
 echo "Then open the 'Cloudy X11' window in the app."
+echo "If the display is missing: ~/cloudy-x11-start.sh and paste its output."
