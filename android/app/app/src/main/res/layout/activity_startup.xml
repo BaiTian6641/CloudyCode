@@ -114,6 +114,20 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="@string/startup_retry" />
+
+                <Button
+                    android:id="@+id/copyBuildScript"
+                    style="@style/Cloudy.Button.Text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Copy backend build script (one-time)" />
+
+                <Button
+                    android:id="@+id/copyRehWebStart"
+                    style="@style/Cloudy.Button.Text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Copy Cloudy backend start command" />
             </LinearLayout>
 
             <Button

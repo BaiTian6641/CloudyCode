@@ -65,14 +65,25 @@ class StartupActivity : Activity() {
         offline = findViewById(R.id.offline)
         advanced = findViewById(R.id.advanced)
 
-        findViewById<TextView>(R.id.commandBlock).text = SETUP_COMMAND
+        findViewById<TextView>(R.id.commandBlock).text = GuestSetup.COMMAND
         findViewById<Button>(R.id.copySetup).setOnClickListener {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("Cloudy Code setup", SETUP_COMMAND))
+            setClipboard("Cloudy Code setup", GuestSetup.COMMAND)
             detail.text = "Command copied. Paste it in the Terminal; this screen continues " +
                 "by itself when the server is available."
         }
         findViewById<Button>(R.id.openTerminal).setOnClickListener { openTerminalApp() }
+        findViewById<Button>(R.id.copyBuildScript).setOnClickListener {
+            val script = assets.open("cloudy-build-backend.sh").bufferedReader().use { it.readText() }
+            setClipboard("Cloudy backend build", script)
+            detail.text = "Build script copied. Paste it in the Terminal once (about 15-30 " +
+                "minutes). When it finishes, copy the Cloudy backend start command and run it."
+        }
+        findViewById<Button>(R.id.copyRehWebStart).setOnClickListener {
+            val token = (application as GbCodeApp).connectionToken()
+            setClipboard("Cloudy backend start", GuestSetup.rehWebStartCommand(token))
+            detail.text = "Start command copied. Run it in the Terminal; this screen connects " +
+                "on port 8085 when the Cloudy backend is up."
+        }
         findViewById<Button>(R.id.retry).setOnClickListener {
             pollBoth.set(false)
             handler.removeCallbacks(setupPoll)
@@ -153,8 +164,7 @@ class StartupActivity : Activity() {
     private fun setupState() {
         if (hasManageTerminal() || forceIntent) {
             launchTerminalCommand(
-                "\$HOME/.local/bin/cloudy-start-backend --token " +
-                    "${(application as GbCodeApp).connectionToken()} --port $BACKEND_PORT")
+                GuestSetup.rehWebStartCommand((application as GbCodeApp).connectionToken()))
             awaitPort()
             return
         }
@@ -287,6 +297,11 @@ class StartupActivity : Activity() {
         }
     }
 
+    private fun setClipboard(label: String, value: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+    }
+
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
@@ -295,9 +310,6 @@ class StartupActivity : Activity() {
         private const val BACKEND_PORT = 8085
         private const val CODE_SERVER_PORT = 8080
         private const val PROBE_PORT = 18080
-        private const val SETUP_COMMAND =
-            "curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone " +
-                "--prefix=\$HOME/.local && nohup \$HOME/.local/bin/code-server " +
-                "--bind-addr 0.0.0.0:8080 --auth none >\$HOME/code-server.log 2>&1 &"
+
     }
 }

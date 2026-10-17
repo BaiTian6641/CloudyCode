@@ -15,6 +15,11 @@ object GuestSetup {
     /** Pinned reh-web backend (preinstalled/daemon lane). */
     const val REH_WEB_PORT = 8085
 
+    /** Start the built reh-web backend with the app's own connection token. */
+    fun rehWebStartCommand(token: String): String =
+        "printf '%s' '$token' > \$HOME/.local/share/cloudy/token && " +
+            "\$HOME/.local/share/cloudy/start-backend.sh"
+
     const val COMMAND =
         "curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone " +
             "--prefix=\$HOME/.local && nohup \$HOME/.local/bin/code-server " +
