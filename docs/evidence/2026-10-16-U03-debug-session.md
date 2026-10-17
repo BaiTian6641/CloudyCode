@@ -9,6 +9,21 @@
 - Continued through the loop iterations; the debug UI (toolbar, variables/call-stack surfaces, Debug Console tab) is the stock upstream one.
 - Screenshot: `docs/evidence/U03-debug-session.webp`.
 
+## Selected backend re-run — code-server 4.141.0 (2026-10-17)
+
+Same fixture (`probe.js` + `.vscode/launch.json`), trusted workspace, launch configuration picked from Run and Debug.
+
+| Check | Result |
+|---|---|
+| Launch configuration starts (`Debug probe.js`) | PASS — debug toolbar visible, status bar `Debug probe.js (gbcode-ws)` |
+| Execution pauses at `debugger;` | PASS — line 5 highlighted yellow in the editor |
+| Real adapter + process | PASS — terminal shows `/usr/bin/node …/ms-vscode.js-debug/src/bootloader.js --inspect… ./probe.js` and "Debugger attached."; server-side `ms-vscode.js-debug/src/watchdog.js` (PID 1115954) runs from code-server's bundled extension |
+| Stock debug surfaces | PASS — toolbar, breakpoint gutter, Debug Console tab present |
+
+Screenshot: `U03-debug-session-code-server.png`.
+
+**Consequence:** the debugger lane now exists on the selected backend, not only the pristine control. The physical lane still must prove breakpoints/stepping with a guest debug adapter (and the ESP32-S3 OpenOCD/GDB flow in U02.05).
+
 ## Notes
 
 - js-debug was bundled into the reh-web control build from the upstream source build's extension fetch (`ms-vscode.js-debug@1.140.0` pulled during the U03.01 build) — the debug stack is upstream, not a Marketplace dependency.
