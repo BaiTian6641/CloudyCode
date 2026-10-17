@@ -79,7 +79,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="One-time setup: installs the serial bridge, USB/IP relay and the backend service in the Linux VM, with auto-start. Run it once in the Terminal." />
+                    android:text="One-time setup: installs the backend service in the Linux VM with auto-start. Run it once in the Terminal." />
 
                 <TextView
                     android:id="@+id/commandBlock"
