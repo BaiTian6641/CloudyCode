@@ -40,6 +40,7 @@ class UsbInventoryActivity : Activity() {
     private lateinit var startUsbIp: Button
     private lateinit var stopUsbIp: Button
     private lateinit var copyUsbIp: Button
+    private lateinit var copySetup: Button
     private lateinit var bridgeStatus: TextView
     private var debugToken: String? = null
     private val token: String
@@ -141,6 +142,15 @@ class UsbInventoryActivity : Activity() {
             text = "Copy USB/IP relay command"
             setOnClickListener { copyUsbIpCommand() }
         }
+        copySetup = Button(this).apply {
+            text = "Copy Linux setup command (services + auto-attach)"
+            setOnClickListener {
+                val script = assets.open("cloudy-setup.sh").bufferedReader().use { it.readText() }
+                setClipboardText("Cloudy setup", GuestSetup.setupCommand(token, script))
+                status.text = "Setup command copied. Run it once in the Terminal (sudo). It " +
+                    "refreshes the bridges and installs the USB/IP auto-attach unit."
+            }
+        }
         root.addView(title)
         root.addView(status)
         root.addView(requestButton)
@@ -152,6 +162,7 @@ class UsbInventoryActivity : Activity() {
         root.addView(startUsbIp)
         root.addView(stopUsbIp)
         root.addView(copyUsbIp)
+        root.addView(copySetup)
         root.addView(scroll, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -212,6 +223,12 @@ class UsbInventoryActivity : Activity() {
             "Cloudy USB/IP relay", command))
         status.text = "USB/IP relay command copied. Run it in the Terminal, start USB/IP " +
             "forwarding here, then in the VM: usbip attach -r 127.0.0.1 -b cloudy-303a-1001"
+    }
+
+    private fun setClipboardText(label: String, value: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE)
+            as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText(label, value))
     }
 
     private fun copyGuestCommand() {

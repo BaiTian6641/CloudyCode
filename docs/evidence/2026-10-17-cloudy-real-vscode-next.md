@@ -153,6 +153,20 @@ Verified on the emulator: with the workbench in offline mode, starting a real co
 
 Design: all surfaces reuse the Cloudy tokens/typography/radii from `ConnectionOverlay`; the banner uses the same card surface, primary "Switch" action and text "Not now".
 
+## Guest auto-attach and app auto-forward (2026-10-17, real device)
+
+The user's VM had the bridges running and forwarded (7001/7002, 3240/3241 visible on Android) but no serial port in the frontend: the guest had no VHCI attach, so no `/dev/ttyACM*` existed.
+
+Added:
+
+1. **`cloudy-setup.sh`** now installs `usbip` and a root system unit `cloudy-usbip-attach.service` running `/usr/local/bin/cloudy-usbip-attach`: `modprobe vhci-hcd`, then loops until `usbip list -r 127.0.0.1` finds `cloudy-303a-1001` (the relay serves the list only while the app's exporter is connected) and attaches it. On success `/dev/ttyACM*` exists and the serial monitor/PlatformIO can use it.
+2. App: on workbench resume, if the ESP32-S3 is attached and permitted (and the serial lane is not in use), `UsbIpService` auto-starts, so the relay is served without opening the USB screen.
+3. Entry point: the USB/IP foreground notification now opens the USB screen ("USB devices" action); that screen gained **Copy Linux setup command (services + auto-attach)** so the updated setup can be re-run even when the backend makes the startup screen unreachable.
+
+Verified on the device: guest bridges forwarded; the app's exporter auto-started and has an established connection to the relay (127.0.0.1:3241). The remaining step is running the updated setup in the VM (installs the attach unit) — guest-side VHCI/kernel support is still the platform gate.
+
+Backend state observed: only code-server on 8080 is listening; the pinned reh-web backend on 8085 is not running (build/service pending).
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).

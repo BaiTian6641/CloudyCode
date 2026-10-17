@@ -29,7 +29,7 @@ mkdir -p "$BASE/data" "$BASE/extensions" "$UNITS"
 if [ "$DRY" = 0 ]; then
   sudo -v
   sudo apt-get update
-  sudo apt-get install -y --no-install-recommends python3 ca-certificates curl
+  sudo apt-get install -y --no-install-recommends python3 ca-certificates curl usbip
 fi
 
 cat > "$BASE/cloudy-serial-bridge.py" <<'PY'
@@ -663,6 +663,60 @@ case "$BACKEND" in
   *) echo "unknown backend: $BACKEND" >&2; exit 2;;
 esac
 
+# Root helper: attach the exported device through VHCI as soon as the relay
+# serves it. Runs as a system unit (needs root); harmless retry if vhci is
+# missing or the app has not connected yet.
+SYSDIR="/etc/systemd/system"
+if [ "$DRY" = 1 ]; then SYSDIR="$BASE/system"; fi
+mkdir -p "$SYSDIR" 2>/dev/null || true
+ATTACH_HELPER="$BASE/cloudy-usbip-attach.sh"
+cat > "$ATTACH_HELPER" <<'SH'
+#!/usr/bin/env bash
+set -u
+modprobe vhci-hcd 2>/dev/null || true
+BUSID="cloudy-303a-1001"
+while true; do
+  if usbip port 2>/dev/null | grep -q "$BUSID"; then sleep 5; continue; fi
+  if usbip list -r 127.0.0.1 2>/dev/null | grep -q "$BUSID"; then
+    usbip attach -r 127.0.0.1 -b "$BUSID" 2>/dev/null || true
+  fi
+  sleep 3
+done
+SH
+chmod +x "$ATTACH_HELPER"
+if [ "$DRY" = 1 ]; then
+  cat > "$SYSDIR/cloudy-usbip-attach.service" <<UNIT
+[Unit]
+Description=Cloudy USB/IP auto-attach (VHCI)
+After=network.target
+
+[Service]
+ExecStart=$ATTACH_HELPER
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+else
+  sudo install -m 755 "$ATTACH_HELPER" /usr/local/bin/cloudy-usbip-attach
+  sudo tee "$SYSDIR/cloudy-usbip-attach.service" >/dev/null <<UNIT
+[Unit]
+Description=Cloudy USB/IP auto-attach (VHCI)
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/cloudy-usbip-attach
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now cloudy-usbip-attach.service 2>/dev/null || true
+fi
+
 echo "== installed =="
 echo "token:        $BASE/token (mode 600)"
 echo "serial:       $BASE/cloudy-serial-bridge.py (guest 7001 -> RFC2217 7002)"
@@ -693,6 +747,8 @@ done
 loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER" 2>/dev/null || true
 
 echo
+echo "usb/ip attach: cloudy-usbip-attach.service (system) enabled; it attaches"
+echo "               cloudy-303a-1001 when the relay is ready; the guest gets /dev/ttyACM*"
 echo "services enabled; they start with the VM."
 echo "In the Terminal app keep this window open for the port forwards."
 echo "Next: open Cloudy Code (it connects on 8085 or 8080)."

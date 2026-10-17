@@ -174,13 +174,21 @@ class UsbIpService : Service() {
         return true
     }
 
-    private fun notification(text: String): Notification =
-        Notification.Builder(this, CHANNEL)
+    private fun notification(text: String): Notification {
+        val open = android.app.PendingIntent.getActivity(
+            this, 0,
+            Intent(this, dev.gbcode.app.ui.UsbInventoryActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            android.app.PendingIntent.FLAG_IMMUTABLE)
+        return Notification.Builder(this, CHANNEL)
             .setContentTitle("Cloudy Code")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setOngoing(true)
+            .addAction(0, "USB devices", open)
+            .setContentIntent(open)
             .build()
+    }
 
     private fun notify(text: String) {
         getSystemService(NotificationManager::class.java).notify(NOTIF_ID, notification(text))
