@@ -14,8 +14,11 @@ Standard library only.
 import argparse
 import glob
 import os
+import platform
+import shutil
 import socket
 import struct
+import subprocess
 import sys
 import time
 
@@ -43,6 +46,61 @@ def vhci_dir():
         if os.path.exists(os.path.join(path, "attach")):
             return path
     return None
+
+
+def module_dir():
+    release = platform.release()
+    return f"/lib/modules/{release}/kernel/drivers/usb/usbip"
+
+
+def diagnose():
+    release = platform.release()
+    print(f"kernel: {release}", flush=True)
+    print(f"modprobe: {shutil.which('modprobe') or 'MISSING'}", flush=True)
+    print(f"insmod: {shutil.which('insmod') or 'MISSING'}", flush=True)
+    moddir = module_dir()
+    print(f"usbip module dir: {moddir} exists={os.path.isdir(moddir)}", flush=True)
+    if os.path.isdir(moddir):
+        print("  modules: " + ", ".join(sorted(os.listdir(moddir))), flush=True)
+    vdir = vhci_dir()
+    print(f"vhci sysfs: {vdir or 'MISSING'}", flush=True)
+    if vdir:
+        try:
+            with open(os.path.join(vdir, "status")) as f:
+                print(f.read(), flush=True)
+        except OSError as e:
+            print(f"status read failed: {e}", flush=True)
+
+
+def ensure_vhci():
+    """Return the vhci sysfs dir, attempting to load the module."""
+    vdir = vhci_dir()
+    if vdir:
+        return vdir
+    # 1) modprobe (needs kmod)
+    if shutil.which("modprobe"):
+        try:
+            subprocess.run(["modprobe", "vhci-hcd"], check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+        vdir = vhci_dir()
+        if vdir:
+            return vdir
+    # 2) insmod against the distro module file (no kmod needed)
+    moddir = module_dir()
+    for name in ("vhci-hcd.ko", "vhci_hcd.ko", "vhci-hcd.ko.zst", "vhci_hcd.ko.zst"):
+        path = os.path.join(moddir, name)
+        if os.path.exists(path) and shutil.which("insmod") and not name.endswith(".zst"):
+            try:
+                subprocess.run(["insmod", path], check=False,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+            vdir = vhci_dir()
+            if vdir:
+                return vdir
+    return vhci_dir()
 
 
 def free_port(vdir):
@@ -103,6 +161,8 @@ def main():
     ap.add_argument("--busid", default=BUSID_DEFAULT)
     ap.add_argument("--check", action="store_true",
                     help="import once, print the device and exit (no sysfs)")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="print kernel/module/vhci diagnostics and exit")
     args = ap.parse_args()
 
     if args.check:
@@ -112,12 +172,20 @@ def main():
         sock.close()
         return
 
-    vdir = vhci_dir()
-    if not vdir:
-        print("vhci_hcd is not present (/sys/devices/platform/vhci_hcd*)", file=sys.stderr)
-        print("run: sudo modprobe vhci-hcd", file=sys.stderr)
-        sys.exit(1)
+    if args.diagnose:
+        diagnose()
+        return
 
+    vdir = ensure_vhci()
+    if not vdir:
+        print("vhci_hcd is not available in this kernel; diagnostics:", flush=True)
+        diagnose()
+        print("retrying every 10s", flush=True)
+        while True:
+            time.sleep(10)
+            vdir = ensure_vhci()
+            if vdir:
+                break
     print(f"vhci: {vdir}", flush=True)
     while True:
         port = free_port(vdir)

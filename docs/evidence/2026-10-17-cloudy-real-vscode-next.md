@@ -176,6 +176,17 @@ The VM reported `usbip: command not found`: the running setup predates the usbip
 3. The full setup now also uses the same apt fallbacks/verification, and its copy is **gzip+base64 compressed**: the exact command is 8326 bytes instead of ~25 KB and was validated end-to-end (dry-run) from the generated string.
 4. Update story: setup remains idempotent; the compressed one-liner is the current update path. A push-updater over the authenticated bridge (app -> guest) is the next step if copy-free updates are wanted.
 
+## VHCI attach diagnostics (2026-10-17)
+
+`cloudy-usbip-attach` runs but the VM reported `modprobe: not found`-style trouble. The helper now:
+
+- installs `kmod`/`usbutils` from the patch (so `modprobe`/`lsusb` exist);
+- has `--diagnose`: kernel release, modprobe/insmod presence, `/lib/modules/<release>/kernel/drivers/usb/usbip` contents, vhci sysfs path and status;
+- tries `modprobe vhci-hcd`, then `insmod` on the distro module file; if still absent it logs the diagnostics and retries every 10 s instead of exiting;
+- the patch prints the diagnostics after installation.
+
+This distinguishes: missing `kmod` (fixable), missing module files, and a kernel built without `vhci_hcd` (transparent USB impossible; serial lane only).
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).
