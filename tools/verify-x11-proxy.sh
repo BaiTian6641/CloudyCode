@@ -11,13 +11,22 @@ cd "$(dirname "$0")/.."
 
 tmp=$(mktemp -d)
 pid=""
-trap 'kill "${pid:-}" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+spid=""
+trap 'kill "${pid:-}" "${spid:-}" 2>/dev/null || true; rm -rf "$tmp"' EXIT
 
 awk 'index($0,"cat > \"$BASE/cloudy-x11-proxy.py\" <<"){f=1;next} f&&$0=="PY"{exit} f' \
   tools/device/cloudy-x11-setup.sh > "$tmp/embedded.py"
 
 if ! diff -u tools/device/cloudy-x11-proxy.py "$tmp/embedded.py"; then
   echo "x11 proxy: embedded setup copy drifted from the standalone" >&2
+  exit 1
+fi
+
+awk 'index($0,"cat > \"$BASE/cloudy-x11-sessiond.py\" <<"){f=1;next} f&&$0=="SESSIOND"{exit} f' \
+  tools/device/cloudy-x11-setup.sh > "$tmp/sessiond.py"
+
+if ! diff -u tools/device/cloudy-x11-sessiond.py "$tmp/sessiond.py"; then
+  echo "x11 sessiond: embedded setup copy drifted from the standalone" >&2
   exit 1
 fi
 
@@ -47,3 +56,28 @@ if [ "$(cat "$tmp/body")" != "$expected" ]; then
 fi
 
 echo "x11 proxy: embedded == standalone; cookie-free ping 200 + HMAC"
+
+python3 "$tmp/sessiond.py" --base-dir "$tmp" --token-file "$tmp/token" \
+  --listen 127.0.0.1:14602 >"$tmp/sessiond.log" 2>&1 &
+spid=$!
+
+for _ in $(seq 1 30); do
+  curl -sf -o /dev/null "http://127.0.0.1:14602/__cloudy/ping?nonce=probe" && break
+  sleep 0.1
+done
+
+code=$(curl -s -o "$tmp/body" -w '%{http_code}' \
+  "http://127.0.0.1:14602/__cloudy/ping?nonce=probe")
+if [ "$code" != 200 ] || [ "$(cat "$tmp/body")" != "$expected" ]; then
+  echo "x11 sessiond: cookie-free ping failed (HTTP $code)" >&2
+  cat "$tmp/sessiond.log" >&2
+  exit 1
+fi
+
+code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:14602/list")
+if [ "$code" != 403 ]; then
+  echo "x11 sessiond: unauthenticated /list returned HTTP $code" >&2
+  exit 1
+fi
+
+echo "x11 sessiond: embedded == standalone; ping 200 + HMAC; /list 403 without cookie"

@@ -1,6 +1,7 @@
 package dev.gbcode.app.ui
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -10,6 +11,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.util.Log
 import android.view.View
 import android.webkit.WebResourceRequest
@@ -55,11 +58,20 @@ class X11Activity : Activity() {
     private var downCount = 0
     private var profileReady = false
 
+    private val port: Int by lazy { intent.getIntExtra("port", DEFAULT_PORT) }
+    private val sessionId: String? by lazy { intent.getStringExtra("sid") }
+    private val sessionName: String? by lazy { intent.getStringExtra("name") }
+    private val forceSetup: Boolean by lazy { intent.getBooleanExtra("setup", false) }
+    private val origin: String by lazy { "http://$HOST:$port" }
+
     private val token: String
         get() = (application as GbCodeApp).x11Token()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setTitle(sessionName ?: "Cloudy X11")
+        sessionName?.let { setTaskDescription(ActivityManager.TaskDescription(it)) }
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         buildUi()
         startPolling()
     }
@@ -73,7 +85,7 @@ class X11Activity : Activity() {
         profileReady = applyIsolatedProfile(webView)
         webView.apply {
             visibility = View.GONE
-            setBackgroundColor(Color.parseColor("#101C22"))
+            setBackgroundColor(Color.BLACK)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = false
@@ -81,10 +93,15 @@ class X11Activity : Activity() {
             settings.allowFileAccessFromFileURLs = false
             settings.allowUniversalAccessFromFileURLs = false
             settings.blockNetworkLoads = true
+            settings.setSupportZoom(false)
+            settings.builtInZoomControls = false
+            settings.displayZoomControls = false
+            settings.textZoom = 100
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val uri = request.url
-                    val allowed = uri.scheme == "http" && uri.host == HOST && uri.port == PORT
+                    val allowed = uri.scheme == "http" && uri.host == HOST && uri.port == port
                     if (!allowed) Log.w(TAG, "blocked navigation: $uri")
                     return !allowed
                 }
@@ -92,7 +109,7 @@ class X11Activity : Activity() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest):
                         android.webkit.WebResourceResponse? {
                     val uri = request.url
-                    return if (uri.scheme == "http" && uri.host == HOST && uri.port == PORT) null
+                    return if (uri.scheme == "http" && uri.host == HOST && uri.port == port) null
                     else android.webkit.WebResourceResponse("text/plain", "utf-8",
                         java.io.ByteArrayInputStream(ByteArray(0)))
                 }
@@ -109,6 +126,8 @@ class X11Activity : Activity() {
 
                 override fun onPageFinished(view: WebView, url: String) {
                     Log.i(TAG, "X11 client loaded: $url")
+                    injectClientCss()
+                    hideIme()
                 }
 
                 override fun onReceivedError(view: WebView, request: WebResourceRequest,
@@ -134,7 +153,7 @@ class X11Activity : Activity() {
         ProfileStore.getInstance().getOrCreateProfile(PROFILE)
         WebViewCompat.setProfile(view, PROFILE)
         val cookies = ProfileStore.getInstance().getProfile(PROFILE)?.cookieManager
-        cookies?.setCookie(ORIGIN, "$COOKIE=${token}; Path=/; HttpOnly")
+        cookies?.setCookie(origin, "$COOKIE=${token}; Path=/; HttpOnly")
         cookies?.flush()
         true
     } catch (e: Throwable) {
@@ -218,12 +237,14 @@ class X11Activity : Activity() {
                     if (!polling) return@runOnUiThread
                     if (auth == Auth.OK) {
                         downCount = 0
-                        if (!loaded) {
+                        if (!loaded && forceSetup) {
+                            showSetup("X11 setup")
+                        } else if (!loaded) {
                             setupView.visibility = View.GONE
                             webView.visibility = View.VISIBLE
                             webView.settings.blockNetworkLoads = false
                             webView.requestFocus()
-                            webView.loadUrl("$ORIGIN/")
+                            webView.loadUrl("$origin/?floating_menu=no&autohide=yes&border=no&video=no&encoding=png")
                             loaded = true
                         }
                     } else {
@@ -236,7 +257,7 @@ class X11Activity : Activity() {
                                 "the setup from this window (Copy X11 setup command).")
                         else if (auth == Auth.BAD_RESPONSE) showSetup(
                             "The X11 endpoint answered but did not return the challenge. Another " +
-                                "service may own port 14500; re-run the setup from this window.")
+                                "service may own port $port; re-run the setup from this window.")
                         else showSetup("Looking for the X11 server…")
                     }
                     handler.postDelayed(this, 2000)
@@ -250,7 +271,7 @@ class X11Activity : Activity() {
     private fun authenticate(): Auth = try {
         val nonceBytes = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val nonce = nonceBytes.joinToString("") { "%02x".format(it) }
-        val conn = URL("$ORIGIN/__cloudy/ping?nonce=$nonce").openConnection() as HttpURLConnection
+        val conn = URL("$origin/__cloudy/ping?nonce=$nonce").openConnection() as HttpURLConnection
         conn.connectTimeout = 1500
         conn.readTimeout = 1500
         if (conn.responseCode != 200) {
@@ -321,6 +342,11 @@ class X11Activity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        sessionName?.let {
+            setTitle(it)
+            setTaskDescription(ActivityManager.TaskDescription(it))
+        }
+        hideIme()
         startPolling()
     }
 
@@ -333,17 +359,66 @@ class X11Activity : Activity() {
     override fun onDestroy() {
         polling = false
         handler.removeCallbacks(probeRunnable)
+        if (isFinishing) sessionId?.let { sid ->
+            Thread {
+                try { stopSession(sid) } catch (e: Exception) {
+                    Log.w(TAG, "session stop failed: ${e.message}")
+                }
+            }.apply { isDaemon = true }.start()
+        }
         probe.shutdownNow()
         webView.stopLoading()
         webView.destroy()
         super.onDestroy()
     }
 
+    private fun injectClientCss() {
+        val js = """
+            (function(){
+              if (document.getElementById('cloudy-css')) return;
+              var s=document.createElement('style');
+              s.id='cloudy-css';
+              s.textContent=
+                'html,body{background-image:none!important;background-color:#000!important}'+
+                '#top_bar,.toolbar,#toolbar,.floating-menu,.floating_menu,.simple-keyboard{display:none!important}';
+              document.documentElement.appendChild(s);
+            })()
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
+    }
+
+    private fun hideIme() {
+        val imm = getSystemService(InputMethodManager::class.java)
+        imm.hideSoftInputFromWindow(webView.windowToken, 0)
+        window.decorView.postDelayed({
+            getSystemService(InputMethodManager::class.java)
+                .hideSoftInputFromWindow(webView.windowToken, 0)
+        }, 500)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideIme()
+    }
+
+    private fun stopSession(sid: String) {
+        val conn = URL("http://$HOST:$CONTROL_PORT/stop").openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Cookie", "$COOKIE=$token")
+        conn.connectTimeout = 1500
+        conn.readTimeout = 3000
+        conn.outputStream.use { it.write("{\"id\":\"$sid\"}".toByteArray()) }
+        conn.responseCode
+        conn.disconnect()
+    }
+
     companion object {
         private const val TAG = "CloudyX11"
         private const val HOST = "127.0.0.1"
-        private const val PORT = 14500
-        private const val ORIGIN = "http://$HOST:$PORT"
+        private const val DEFAULT_PORT = 14500
+        private const val CONTROL_PORT = 14509
         private const val COOKIE = "cloudy_x11"
         private const val PROFILE = "cloudy-x11"
     }

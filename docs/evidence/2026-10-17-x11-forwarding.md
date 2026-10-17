@@ -94,6 +94,40 @@ Verified state:
 - xpra session LIVE at `:100`; `pgrep -a firefox` → `978 firefox-esr`; the Cloudy X11 window rendered the Firefox window and a second X client window.
 - Rebuilt/installed app (`./tools/verify-x11-proxy.sh` green, `assembleDebug` green) and re-verified the load.
 
+
+## Per-application windows (2026-10-17)
+
+Each application now gets its own xpra session and its own Googlebook OS
+window, instead of one desktop window hosting every X client.
+
+Architecture:
+
+- `cloudy-x11-sessiond.py` listens on `127.0.0.1:14509` (token-authenticated,
+  cookie-free HMAC ping). The app's launcher asks it to start a preset or a
+  custom command.
+- Per session the daemon allocates a display (`:110`+), an xpra HTML5 TCP port
+  (`14610`+) and a token proxy port (`14510`+), then starts xpra with
+  `--start=<app>` and the proxy in front of it.
+- The launcher starts `X11Activity` with `NEW_DOCUMENT|MULTIPLE_TASK` and
+  document launch mode, so every session is a separate freeform task/window
+  with the same launch bounds (72% x 78% of the display).
+- Closing the window stops its xpra session and proxy (verified: ports and
+  `xpra list` entry disappear).
+
+Containment/sharpness:
+
+- Viewer URL: `?floating_menu=no&autohide=yes&border=no&video=no&encoding=png`.
+- Injected CSS removes xpra's wallpaper (`background-image:none`, black) and
+  hides the toolbar and the in-page `.simple-keyboard`. Hardware-key input
+  still works (typed `example.com` and loaded it with no on-screen keyboard).
+- Server: Xvfb `2880x1800x24`, DPI 144, `--encoding=png`,
+  `--video-encoders=none`, quality 100 (lossless; no video/JPEG blur).
+- WebView: no zoom, hardware layer, zoom controls disabled.
+
+Verified on the Googlebook: Firefox on proxy `14510` and xterm on `14511`
+running concurrently in two tasks; both windows contain only the app on black;
+no soft keyboard; typing works; per-window close cleans up the session.
+
 ## Limits
 
 - One Android window hosting all X windows (xpra seamless UI), not one OS window per X top-level.
