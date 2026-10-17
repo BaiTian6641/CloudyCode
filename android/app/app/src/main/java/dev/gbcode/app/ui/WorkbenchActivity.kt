@@ -47,7 +47,7 @@ class WorkbenchActivity : Activity() {
                 val msg = "backend URL rejected: only http loopback backends are supported (got $backend)"
                 android.util.Log.e("GBCodeWorkbench", msg)
                 val errorView = android.widget.TextView(this)
-                errorView.text = "GBCode: $msg"
+                errorView.text = "Cloudy Code: $msg"
                 errorView.setPadding(48, 96, 48, 48)
                 setContentView(errorView)
                 return
@@ -71,7 +71,7 @@ class WorkbenchActivity : Activity() {
             val msg = "packaged workbench assets missing (run tools/release/package-web-assets.sh)"
             android.util.Log.e("GBCodeWorkbench", msg)
             val errorView = android.widget.TextView(this)
-            errorView.text = "GBCode: $msg"
+            errorView.text = "Cloudy Code: $msg"
             errorView.setPadding(48, 96, 48, 48)
             setContentView(errorView)
             return
