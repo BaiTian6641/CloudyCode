@@ -28,9 +28,20 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
     @Volatile var port: Int = -1
         private set
 
-    fun start(): Int {
+    fun start(preferredPort: Int = 0): Int {
         val srv = ServerSocket()
-        srv.bind(InetSocketAddress("127.0.0.1", 0))
+        var bound = false
+        if (preferredPort in 1..65535) {
+            try {
+                srv.bind(InetSocketAddress("127.0.0.1", preferredPort))
+                bound = true
+            } catch (e: IOException) {
+                // Another process owns the preferred port. Never route credentials
+                // through it; fall back to a fresh verified origin and say so.
+                android.util.Log.w(TAG, "preferred port $preferredPort unavailable (${e.message}); using ephemeral port")
+            }
+        }
+        if (!bound) srv.bind(InetSocketAddress("127.0.0.1", 0))
         server = srv
         port = srv.localPort
         android.util.Log.i(TAG, "listening on 127.0.0.1:${srv.localPort} -> $upstreamHost:$upstreamPort")

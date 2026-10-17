@@ -37,7 +37,7 @@ class WorkbenchActivity : Activity() {
         val upstreamHost = upstream.host ?: "127.0.0.1"
         val upstreamPort = if (upstream.port > 0) upstream.port else 80
 
-        gateway = Gateway(upstreamHost, upstreamPort).also { it.start() }
+        gateway = Gateway(upstreamHost, upstreamPort).also { it.start(PREFERRED_GATEWAY_PORT) }
         val origin = "http://127.0.0.1:${gateway!!.port}"
 
         if (BuildConfig.DEBUG) {
@@ -116,5 +116,13 @@ class WorkbenchActivity : Activity() {
         webView?.destroy()
         gateway?.close()
         super.onDestroy()
+    }
+
+    private companion object {
+        // Browser storage (settings, editor state, service worker caches) is keyed
+        // by scheme+host+port. A stable loopback port keeps that origin across
+        // process restarts; Gateway falls back to an ephemeral port (and logs it)
+        // if another process already owns this one — it never routes through it.
+        const val PREFERRED_GATEWAY_PORT = 41873
     }
 }

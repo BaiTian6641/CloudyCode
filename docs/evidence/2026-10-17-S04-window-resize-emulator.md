@@ -32,10 +32,11 @@ Cause: `WorkbenchActivity` declared `configChanges="orientation|screenSize|scree
 ## Findings
 
 1. **Fixed:** density/display-size changes no longer recreate the activity or churn the origin.
-2. **Open (S04.01/S09):** process death or activity recreation for other reasons (force-stop, low memory) still yields a new ephemeral gateway port → new origin → open editor tabs and browser-stored settings are lost. Options for the design review: (a) one app-lifetime gateway with a stable port and explicit conflict handling per S02.03, (b) a stable hostname origin resolved to loopback, or (c) explicit workbench state export/restore. This must be resolved before multi-window (S04.01) since each window needs a defined origin.
-3. Desktop-width relayout is correct at 1600×1000 (menubar + three panes + terminal panel); landscape phone width collapses the menubar as upstream does.
-4. The Restricted Mode trust dialog appears on terminal creation inside the APK (workspace untrusted), matching the trust correction.
+2. **Fixed:** the gateway now binds a stable loopback port (`127.0.0.1:41873`, ADR-0005) with an ephemeral fallback only on conflict. Verified: cold start → `41873`; notebook opened, `am force-stop` + relaunch → **same origin, tabs `test.ipynb` and `GBCode Conformance` restored, notebook editor reopened**. This replaces the earlier "new port on every restart → lost editor state" behavior.
+3. Multi-window (S04.01) must choose one shared gateway (preferred) or define per-window origins; a second activity cannot also bind 41873 (fallback would create a new state bucket).
+4. Desktop-width relayout is correct at 1600×1000 (menubar + three panes + terminal panel); landscape phone width collapses the menubar as upstream does.
+5. The Restricted Mode trust dialog appears on terminal creation inside the APK (workspace untrusted), matching the trust correction.
 
 ## Not covered here
 
-True multi-window/split-screen, external display, process-death state restoration, caption insets and IME — physical/implementation work in S04.01/S04.02.
+True multi-window/split-screen, external display, caption insets and IME — physical/implementation work in S04.01/S04.02.
