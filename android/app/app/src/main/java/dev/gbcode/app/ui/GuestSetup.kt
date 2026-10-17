@@ -18,7 +18,8 @@ object GuestSetup {
     /** Start the built reh-web backend with the app's own connection token. */
     fun rehWebStartCommand(token: String): String =
         "printf '%s' '$token' > \$HOME/.local/share/cloudy/token && " +
-            "\$HOME/.local/share/cloudy/start-backend.sh"
+            "{ systemctl --user restart cloudy-code.service 2>/dev/null || " +
+            "\$HOME/.local/share/cloudy/start-backend.sh; }"
 
     const val COMMAND =
         "curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone " +

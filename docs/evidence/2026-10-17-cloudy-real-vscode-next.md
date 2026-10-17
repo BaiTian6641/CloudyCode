@@ -40,6 +40,24 @@ Next concrete steps:
 2. Probe the VM for `vhci_hcd`/`usbip`; if absent, fall back to the selected-adapter scope.
 3. Implement the exporter spike (enumerate → claim → USB/IP over the authenticated local route) and one certified serial workflow in the VM.
 
+## Extension catalog reality (2026-10-17)
+
+The user asked for "VS Code official plugins plus Open VSX". Facts checked against the registries:
+
+- `ms-vscode.vscode-serial-monitor`, `ms-vscode.cpptools`, `ms-vscode.js-debug`, `ms-vscode-remote.remote-ssh` are **not** on Open VSX (HTTP 404).
+- The Microsoft Marketplace service is licensed for Microsoft products; using it from a third-party client is not permitted, and the engineering plan explicitly forbids spoofing Marketplace access.
+- Open VSX does host viable alternatives, e.g. `eclipse-cdt.serial-monitor` ("Web and Desktop Serial Monitor", 2.0.0) and the Jupyter/Table Visualizer entries already visible in our gallery.
+
+Supported paths, in order:
+
+1. **Open VSX** in the app-owned workbench (implemented, verified: Popular list + Install).
+2. **VSIX sideload** for extensions the user has rights to (workbench "Install from VSIX…"; verified previously on the workstation lane).
+3. **Bundled MIT extensions built from Microsoft's own repositories** where useful. `microsoft/vscode-serial-monitor` is MIT licensed, so a build/bundle step is legally possible; it still needs guest USB access to see a port (below). A self-hosted gallery aggregating Open VSX + redistributable VSIXs is a later option; the workbench supports one gallery service per client.
+
+## Backend auto-start
+
+The one-time build script now enables the **systemd user unit** (`cloudy-code.service`) and `loginctl enable-linger` for the VM user. The first app "Copy Cloudy backend start command" seeds the app's connection token and restarts the unit; afterwards the backend starts with the VM. Fallback when systemd is unavailable: the same command runs `start-backend.sh` in the foreground. The Terminal app is still required for the VM→Android port bridge.
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).
