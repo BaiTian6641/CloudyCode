@@ -25,6 +25,14 @@ class GbCodeApp : Application() {
     @Volatile
     var backendPassword: String? = null
 
+    /** Guest service host kind: `reh-web` (installed frontend, ADR-0006) or `code-server` (baseline). */
+    @Volatile
+    var backendKind: String = "code-server"
+
+    /** Absolute guest folder opened at startup (installed frontend only). */
+    @Volatile
+    var guestFolder: String? = null
+
     private val listeners = CopyOnWriteArrayList<(ConnectionState) -> Unit>()
 
     fun addStateListener(listener: (ConnectionState) -> Unit) {
@@ -46,6 +54,17 @@ class GbCodeApp : Application() {
         val fingerprint: String,
         val serverPublicKey: String,
         val backendPassword: String? = null,
+        /**
+         * Guest folder opened by the installed workbench at startup (absolute
+         * POSIX path in the guest). Null = no workspace.
+         */
+        val guestFolder: String? = null,
+        /**
+         * Guest service host kind. `reh-web` = installed frontend + pristine
+         * Code-OSS remote agent (ADR-0006); `code-server` = the earlier
+         * guest-hosted baseline (rollback mode).
+         */
+        val backendKind: String = "code-server",
     )
 
     private fun prefs() = getSharedPreferences("gbcode", Context.MODE_PRIVATE)
@@ -71,10 +90,14 @@ class GbCodeApp : Application() {
             .putString("workbench", state.workbenchBase)
             .putString("fingerprint", state.fingerprint)
             .putString("serverPublicKey", state.serverPublicKey)
+            .putString("backendKind", state.backendKind)
+            .putString("guestFolder", state.guestFolder)
             .putString("passwordEnc", passwordEncHex)
             .remove("backendPassword") // legacy plaintext key must never survive
             .apply()
         backendPassword = state.backendPassword
+        backendKind = state.backendKind
+        guestFolder = state.guestFolder
     }
 
     fun loadPairedState(): PairedState? {
@@ -92,7 +115,9 @@ class GbCodeApp : Application() {
         val seedBytes = dev.gbcode.app.connection.CredentialStore.decrypt(bytesOf(seedEnc))
         val seedHex = hexOf(seedBytes)
         return PairedState(seedHex, appHash, daemon, workbench, fp,
-            serverPublicKey, password)
+            serverPublicKey, password,
+            p.getString("guestFolder", null),
+            p.getString("backendKind", "code-server") ?: "code-server")
     }
 
     /**
@@ -130,6 +155,8 @@ class GbCodeApp : Application() {
         serverFingerprint = saved.fingerprint
         backendBaseUrl = saved.workbenchBase
         backendPassword = saved.backendPassword
+        backendKind = saved.backendKind
+        guestFolder = saved.guestFolder
         connectionState = ConnectionState.PAIRED
         return true
     }

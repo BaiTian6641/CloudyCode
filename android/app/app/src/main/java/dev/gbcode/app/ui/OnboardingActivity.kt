@@ -197,6 +197,12 @@ class OnboardingActivity : Activity() {
                         fingerprint = fingerprint,
                         serverPublicKey = result.getString("serverPublicKey"),
                         backendPassword = passwordField.text.toString().ifEmpty { null },
+                        guestFolder = if (dev.gbcode.app.BuildConfig.DEBUG) {
+                            intent.getStringExtra("folder")
+                        } else null,
+                        backendKind = if (dev.gbcode.app.BuildConfig.DEBUG) {
+                            intent.getStringExtra("kind") ?: "code-server"
+                        } else "code-server",
                     ))
                     app.setState(ConnectionState.CONNECTED)
                     log("paired; enrollment receipt verified; server fingerprint:\n$fingerprint")

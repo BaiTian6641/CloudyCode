@@ -27,6 +27,7 @@ Classifications: **B** branding/identity, **C** cosmetic, **F** functional addit
 | 19 | Editing/terminal/tasks/debug/LSP/SCM | — | identical stock surfaces, verified on both | — | No delta | S01, U03 lanes |
 | 20 | Extension-host placement | `extensionKind: "ui"` reported for server-side Node execution in the web topology | identical | — | Measure actual placement, not the label (U03.03) | U03 control lane |
 | 21 | New-file keybinding (WebView) | `Ctrl+N` opens a new window/file | Android WebView/browser captures `Ctrl+N`; the page never sees it. `File: New Untitled Text File` works via the palette and `Ctrl+Alt+N` | C | Input matrix (S04) must enumerate browser-reserved chords and route around them | `2026-10-17-ADR0006-installed-frontend-milestone2.md` |
+| 22 | Webview host page origin | Stock OSS `product.json` points `webviewContentExternalBaseUrlTemplate` at `https://{{uuid}}.vscode-cdn.net/insider/<foreign commit>/…`; webviews load that foreign build over the Internet | Overridden with the stock `options.webviewEndpoint` hook → the packaged pre-page at the app origin; iframes verified on `127.0.0.1:41873`; webview renders offline | S/F | Keep the override in the app's workbench configuration; never depend on the CDN for core webview hosts | `2026-10-17-ADR0006-installed-frontend-milestone34.md` |
 
 ## Minimal required changes for the default product
 

@@ -56,7 +56,9 @@ public class CredentialStorageTest {
                 "http://127.0.0.1:8080",
                 "19bf87b3e23ca3081ca28067e23f5376d13e057df4af7e738f732fa6a32eeeaa",
                 "0rK0opBiLgM1blYdrcsLtKwzTxwSorbom7udp3IS-Lk",
-                password);
+                password,
+                null,
+                "code-server");
     }
 
     @Test

@@ -1,0 +1,55 @@
+# ADR-0006 milestones 3–4 — installed workbench ↔ guest IDE services, real workflow (2026-10-17)
+
+The installed (APK-owned) Code-OSS workbench now connects to the **guest remote agent** over the app gateway, and a real workflow runs end to end: guest folder, edit/save, guest terminal, guest language server, extension webview. Emulator lane; the "guest" is a pristine `vscode-reh-web` build of the same pinned commit on this workstation (the Googlebook Debian VM is not released).
+
+## Compatible set (verified in this run)
+
+| Layer | Value |
+|---|---|
+| Workbench assets (APK) | Code-OSS `2a59476c9bfcb90b3ddc372c36762471b7dfad1c` / 1.141.0; 2428 files, 178 326 031 bytes; manifest sha256 `b5bd462d459b4d56af3495ecc7e2fb30b5a616d41911b7e6f7fcac9e80d3a643` |
+| Guest remote agent | `vscode-reh-web-linux-x64`, same commit; `out/server-main.js` sha256 `f9b032b062be28dedb73736c7742f86bf804cb6dde156033ace77a2ba09332c4` |
+| Transport | app gateway `127.0.0.1:41873` (loopback, Host/Origin/method checks) → guest `127.0.0.1:8085`; remote-agent WebSocket at `/<quality>-<commit>` (`/oss-2a59476c…`); `connectionToken` held natively, injected through the app-owned page configuration |
+| Pairing | sessiond receipt-verified pairing; authenticated reconnect verified (S02 lane) |
+
+## Defect found and fixed during connection
+
+1. **Malformed WebSocket URL from `serverBasePath`.** The config used `serverBasePath: ""`; the client computes `posix.join(serverBasePath, '<quality>-<commit>')`, producing `oss-…` without a leading slash → `new WebSocket('ws://127.0.0.1:41873oss-…')` threw *SyntaxError: invalid URL* (proved by wrapping `window.WebSocket`: 10 constructor failures; perf marks `willCreateSocket/Management` → `didCreateSocketError/Management`). Fixed to `"/"` (what `webClientServer` passes). The WS then connected.
+2. **Webview host page came from the OSS CDN template.** The stock OSS `product.json` sets `webviewContentExternalBaseUrlTemplate` to `https://{{uuid}}.vscode-cdn.net/insider/<foreign commit>/…`; webview iframes loaded that foreign build over the Internet (observed `0nac6…vscode-cdn.net/insider/ef65ac…`), violating the app-owned-core requirement and breaking offline webviews. Fixed with the stock hook `options.webviewEndpoint` → `http://127.0.0.1:<gateway>/out/vs/workbench/contrib/webview/browser/pre/` (packaged pre-page). After the fix, webview iframes are `127.0.0.1:41873/.../pre/index.html` and the panel renders.
+3. **Guest packaging gap (recorded, not hidden):** our reh-web package was built without the `@vscode/vsce-sign` runtime dependency, so extension installs failed with "Signature verification was not executed" before any user decision. Copied `@vscode/vsce-sign` + `@vscode/vsce-sign-linux-x64` from the build tree into the guest package. The install then followed the **stock** path: signature verification ran, the extension (unsigned, Open VSX) triggered the stock dialog *"Cannot install … because Code - OSS cannot verify the extension signature"* → "Install Anyway (Don't Verify Signature)" (user-approved, upstream UI). The release pipeline must include this dependency.
+
+## Workflow evidence (emulator, guest service on workstation)
+
+| Step | Result | Evidence |
+|---|---|---|
+| Installed workbench connects to the guest | PASS — WS established; guest log: `ManagementConnection`, `ExtensionHostConnection`, `Launched Extension Host Process` (PID recorded) | guest `remoteagent.log`; gateway trace |
+| Guest folder opened | PASS — Explorer lists guest `/tmp/gbcode-m4-ws` (`hello.py`, `README.md`, `.vscode`); title `hello.py - gbcode-m4-ws` | screenshot `ADR0006-m34-guest-workspace.png` |
+| Workspace Trust preserved | PASS — folder opened in Restricted Mode; trust granted explicitly through the stock Trust UI for the disposable fixture | `ADR0006-m34-trust.png` |
+| Edit + save to guest | PASS — appended `# m4 installed-frontend edit`; saved via Ctrl+S; guest file content updated, sha256 `9ed6038c…` → `ab2df27c…` | shell read-back |
+| Integrated guest terminal | PASS — typed `echo M4_TERM_OK > /tmp/gbcode-m4-term.txt`; file on guest = `M4_TERM_OK`; shell processes `/usr/bin/bash --init-file <guest>/shellIntegration-bash.sh` under the guest pty host (started on demand) | shell read-back + `ps` |
+| Real language completion | PASS — `Pyrefly - Python Language Tooling` installed **through the Extensions view from Open VSX** into the guest (`/tmp/gbcode-guest-m3/extensions/meta.pyrefly-1.4.0-linux-x64`); status bar `Pyrefly (Basic)`; hover `(function) greet: def greet(name: str) -> str`; LSP process `/tmp/gbcode-guest-m3/extensions/.../pyrefly lsp` (PID 1501610) with parent = guest extension host (PID 1498796) | `ADR0006-m34-pyrefly-hover.png`, process tree |
+| Extension webview | PASS — conformance webview panel renders the report (node 24.04.1, `/bin/bash`, workspace `vscode-remote://…/tmp/gbcode-m4-ws`, `isTrusted:true`, product `Code - OSS` 1.141.0, commit `2a59476c9b…`); webview host iframe served from the app package | `ADR0006-m34-webview.png` |
+| Guest core asset routes denied | PASS — `GET /oss-…/static/out/vs/loader.js` → 403 + `deny-core` log; `/static/node_modules/...` → 403 + `deny-core`; dynamic `/static/extensions/...` proxied (class C); workbench traffic proxied only WS + `vscode-remote-resource` | gateway trace |
+| No external core fetches | PASS for workbench/core; the webview CDN default was found and eliminated (defect 2) | iframe URL trace |
+
+## Request trace (categories)
+
+- **App-owned (local, never proxied):** `/out/**`, `/extensions/**` (packaged built-ins), `/resources/server/**`, `/`.
+- **Guest-allowed:** `/<quality>-<commit>` (WS upgrade), `/<quality>-<commit>/vscode-remote-resource` (dynamic extension/webview resources).
+- **Guest-denied:** `/<quality>-<commit>/static/out/**`, `/static/node_modules/**`, `/static/resources/**`, `*/workbench.{html,js,css}` → 403 + `deny-core` trace.
+
+## Tests
+
+`tools/verify.sh` → ALL GREEN. sessiond 27/27; gateway 5/5; instrumented 47/47 (emulator only), including `WebAssetGatewayTest` with the renderer's new parameters.
+
+## Remaining limitations
+
+1. Physical Googlebook lanes remain blocked (device owned by another project): real Terminal VM connectivity, mount semantics, input, lifecycle.
+2. `@vscode/vsce-sign` packaging gap must be fixed in the release build (S11); the workstation lane worked around it by copying the module.
+3. Terminal xterm rows are not DOM-readable in this WebView (canvas rendering), so the terminal proof is the side effect on the guest filesystem plus the guest pty host process tree.
+4. Repeated reloads leave reconnection-grace extension hosts on the guest (expected upstream behavior; bounded by the grace timeout).
+5. Notebook/debug/profile recovery under the installed frontend (milestone 5) not yet run; the previous code-server lanes for those remain the baseline evidence.
+6. Webview sandbox = upstream policy; class-C resources are still served by the guest (allowed) and must never replace the app document (deny rules).
+
+## Rollback
+
+Revert this increment's commits; the gateway with `assets = null` and no remote authority keeps the guest-hosted baseline. The guest service and its state live in `/tmp/gbcode-guest-m3` (disposable); the app's pairing state is replaced on the next pairing.

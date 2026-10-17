@@ -85,14 +85,49 @@ object WorkbenchPage {
      * construction configuration. Workspace Trust stays enabled — pairing with
      * Debian does not mark any repository trusted (ADR-0006).
      */
-    fun renderWorkbench(template: String, remoteAuthority: String?, nonce: String): String {
+    fun renderWorkbench(template: String, remoteAuthority: String?,
+                        connectionToken: String?, folderPath: String?,
+                        webviewEndpoint: String?, nonce: String): String {
         val cfg = org.json.JSONObject()
-        if (remoteAuthority != null) cfg.put("remoteAuthority", remoteAuthority)
-        cfg.put("serverBasePath", "")
+        if (remoteAuthority != null) {
+            cfg.put("remoteAuthority", remoteAuthority)
+            // The remote-agent connection token authenticates the IDE data
+            // session (handshake `auth`), matching the guest's connection
+            // token. It is the transport credential upstream injects at serve
+            // time; the app holds it natively and only places it in the
+            // app-owned page configuration.
+            if (connectionToken != null) cfg.put("connectionToken", connectionToken)
+            // Opening a guest folder is what exercises the remote services
+            // (file system, extension host, terminals) end to end.
+            if (!folderPath.isNullOrEmpty()) {
+                cfg.put("folderUri", org.json.JSONObject()
+                    .put("scheme", "vscode-remote")
+                    .put("authority", remoteAuthority)
+                    .put("path", folderPath))
+            }
+        }
+        // Webview host pages are core workbench assets: serve them from the APK
+        // (app origin), not the OSS default CDN template. `webviewEndpoint`
+        // overrides productService.webviewContentExternalBaseUrlTemplate
+        // (environmentService.webviewExternalEndpoint precedence).
+        if (!webviewEndpoint.isNullOrEmpty()) cfg.put("webviewEndpoint", webviewEndpoint)
+        // Must be '/' (or omitted): the client computes
+        // posix.join(serverBasePath, '<quality>-<commit>'), and an empty string
+        // yields a path without the leading slash -> invalid WebSocket URL
+        // (webClientServer passes basePath, defaulting to '/').
+        cfg.put("serverBasePath", "/")
         cfg.put("enableWorkspaceTrust", true)
         cfg.put("callbackRoute", "/callback")
-        cfg.put("productConfiguration",
-            org.json.JSONObject().put("embedderIdentifier", "server-distro"))
+        // Open VSX is the permitted registry (ADR-0002). The gallery is served
+        // to the workbench exactly as upstream expects; installs execute in the
+        // guest extension host through the remote extension management service.
+        cfg.put("productConfiguration", org.json.JSONObject()
+            .put("embedderIdentifier", "server-distro")
+            .put("extensionsGallery", org.json.JSONObject()
+                .put("serviceUrl", "https://open-vsx.org/vscode/gallery")
+                .put("itemUrl", "https://open-vsx.org/vscode/item")
+                .put("resourceUrlTemplate",
+                    "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}")))
         return render(template, mapOf(
             "WORKBENCH_WEB_BASE_URL" to "",
             "WORKBENCH_WEB_CONFIGURATION" to cfg.toString(),

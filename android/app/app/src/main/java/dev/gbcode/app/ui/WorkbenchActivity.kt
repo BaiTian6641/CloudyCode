@@ -72,10 +72,23 @@ class WorkbenchActivity : Activity() {
             upstreamPort = port
         }
 
+        // ADR-0006: only the installed-frontend + pristine reh-web guest sets a
+        // remote authority (the app-owned page connects to the guest's remote
+        // agent through the gateway). The code-server baseline keeps its
+        // guest-hosted page semantics: no remote authority, native login.
+        val installedFrontend = app.backendKind == "reh-web"
         gateway = Gateway(upstreamHost, upstreamPort, webAssets) { nonce ->
-            renderWorkbench(template, if (upstreamHost != null) {
+            val authority = if (upstreamHost != null && installedFrontend) {
                 "127.0.0.1:${gateway?.port ?: PREFERRED_GATEWAY_PORT}"
-            } else null, nonce)
+            } else null
+            renderWorkbench(
+                template,
+                authority,
+                if (authority != null) app.backendPassword else null,
+                if (authority != null) app.guestFolder else null,
+                "http://127.0.0.1:${gateway?.port ?: PREFERRED_GATEWAY_PORT}/out/vs/workbench/contrib/webview/browser/pre/",
+                nonce,
+            )
         }.also { it.start(PREFERRED_GATEWAY_PORT) }
         val origin = "http://127.0.0.1:${gateway!!.port}"
 
@@ -110,7 +123,7 @@ class WorkbenchActivity : Activity() {
         // The backend credential stays native: we log in through the gateway
         // from app code and hand the WebView only the session cookie(s).
         val password = app.backendPassword
-        if (password != null && upstreamHost != null) {
+        if (password != null && upstreamHost != null && !installedFrontend) {
             Thread {
                 try {
                     val installed = nativeLogin(origin, password)
@@ -167,8 +180,11 @@ class WorkbenchActivity : Activity() {
      * (`WorkbenchPage.renderWorkbench`, the client-side counterpart of the
      * pinned commit's webClientServer.renderWorkbench).
      */
-    private fun renderWorkbench(template: String, remoteAuthority: String?, nonce: String): String {
-        return dev.gbcode.app.web.WorkbenchPage.renderWorkbench(template, remoteAuthority, nonce)
+    private fun renderWorkbench(template: String, remoteAuthority: String?,
+                                connectionToken: String?, folderPath: String?,
+                                webviewEndpoint: String?, nonce: String): String {
+        return dev.gbcode.app.web.WorkbenchPage.renderWorkbench(
+            template, remoteAuthority, connectionToken, folderPath, webviewEndpoint, nonce)
     }
 
     override fun onDestroy() {

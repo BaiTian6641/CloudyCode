@@ -76,7 +76,7 @@ class WebAssetGatewayTest {
         val a = assets()
         val template = a.readText("out/vs/code/browser/workbench/workbench.html")!!
         return Gateway(upstream?.let { "127.0.0.1" }, upstream?.port ?: 0, a) { nonce ->
-            if (renderer) WorkbenchPage.renderWorkbench(template, "127.0.0.1:41873", nonce) else ""
+            if (renderer) WorkbenchPage.renderWorkbench(template, "127.0.0.1:41873", "test-token", "/tmp/gbcode-ws", "http://127.0.0.1:41873/out/vs/workbench/contrib/webview/browser/pre/", nonce) else ""
         }.also { it.start(0) }
     }
 
