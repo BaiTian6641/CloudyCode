@@ -266,7 +266,7 @@ Description=Cloudy X11 token proxy
 After=cloudy-x11.service
 
 [Service]
-ExecStart=/usr/bin/python3 $BASE/cloudy-x11-proxy.py --token-file $BASE/x11-token --listen 0.0.0.0:14500 --upstream 127.0.0.1:14501
+ExecStart=/usr/bin/python3 $BASE/cloudy-x11-proxy.py --token-file $BASE/x11-token --listen 127.0.0.1:14500 --upstream 127.0.0.1:14501
 Restart=on-failure
 RestartSec=2
 
@@ -293,7 +293,7 @@ fi
 if ! ss -ltn 2>/dev/null | grep -q ':14500'; then
   echo "proxy not listening; starting it directly"
   nohup python3 "$BASE/cloudy-x11-proxy.py" --token-file "$BASE/x11-token" \
-    --listen 0.0.0.0:14500 --upstream 127.0.0.1:14501 >"$BASE/x11-proxy.log" 2>&1 &
+    --listen 127.0.0.1:14500 --upstream 127.0.0.1:14501 >"$BASE/x11-proxy.log" 2>&1 &
   sleep 1
 fi
 
