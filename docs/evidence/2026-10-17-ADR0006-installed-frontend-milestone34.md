@@ -28,6 +28,7 @@ The installed (APK-owned) Code-OSS workbench now connects to the **guest remote 
 | Integrated guest terminal | PASS — typed `echo M4_TERM_OK > /tmp/gbcode-m4-term.txt`; file on guest = `M4_TERM_OK`; shell processes `/usr/bin/bash --init-file <guest>/shellIntegration-bash.sh` under the guest pty host (started on demand) | shell read-back + `ps` |
 | Real language completion | PASS — `Pyrefly - Python Language Tooling` installed **through the Extensions view from Open VSX** into the guest (`/tmp/gbcode-guest-m3/extensions/meta.pyrefly-1.4.0-linux-x64`); status bar `Pyrefly (Basic)`; hover `(function) greet: def greet(name: str) -> str`; LSP process `/tmp/gbcode-guest-m3/extensions/.../pyrefly lsp` (PID 1501610) with parent = guest extension host (PID 1498796) | `ADR0006-m34-pyrefly-hover.png`, process tree |
 | Extension webview | PASS — conformance webview panel renders the report (node 24.04.1, `/bin/bash`, workspace `vscode-remote://…/tmp/gbcode-m4-ws`, `isTrusted:true`, product `Code - OSS` 1.141.0, commit `2a59476c9b…`); webview host iframe served from the app package | `ADR0006-m34-webview.png` |
+| Debug session (Python) | PASS — installed `ms-python.debugpy` 2026.6.0 **and its required `ms-python.python` 2026.4.0** into the guest (debugpy refuses to activate without it); guest `.vscode/launch.json` (`type: debugpy`, `stopOnEntry`); F5 from the installed workbench: debug toolbar + first-line stop; adapter `…/ms-python.debugpy-2026.6.0/bundled/libs/debugpy/adapter` (PID 1520061) and launcher (1520112) parented by the **guest extension host** (1519366), debuggee `/bin/python3.14` (1520117) under the launcher; continue → session ends and every debugpy process exits | `ADR0006-m34-debug-stopOnEntry.png`, `ADR0006-m34-debug-complete.png`, `ps` tree |
 | Guest core asset routes denied | PASS — `GET /oss-…/static/out/vs/loader.js` → 403 + `deny-core` log; `/static/node_modules/...` → 403 + `deny-core`; dynamic `/static/extensions/...` proxied (class C); workbench traffic proxied only WS + `vscode-remote-resource` | gateway trace |
 | No external core fetches | PASS for workbench/core; the webview CDN default was found and eliminated (defect 2) | iframe URL trace |
 
@@ -47,8 +48,9 @@ The installed (APK-owned) Code-OSS workbench now connects to the **guest remote 
 2. `@vscode/vsce-sign` packaging gap must be fixed in the release build (S11); the workstation lane worked around it by copying the module.
 3. Terminal xterm rows are not DOM-readable in this WebView (canvas rendering), so the terminal proof is the side effect on the guest filesystem plus the guest pty host process tree.
 4. Repeated reloads leave reconnection-grace extension hosts on the guest (expected upstream behavior; bounded by the grace timeout).
-5. Notebook/debug/profile recovery under the installed frontend (milestone 5) not yet run; the previous code-server lanes for those remain the baseline evidence.
-6. Webview sandbox = upstream policy; class-C resources are still served by the guest (allowed) and must never replace the app document (deny rules).
+5. Notebook/debug/profile recovery under the installed frontend (milestone 5): **debug now verified** (rows above); notebooks still need the Jupyter extension + kernel under the installed origin (code-server lane remains the notebook baseline); user settings/UI state in installed-frontend mode are stored in the WebView's profile, not the guest user-data-dir — define the profile semantics in S02.19/S09.
+6. The shared emulator dropped the app process and its data mid-run; re-pairing exercised the onboarding flow again (fresh daemon + `kind=reh-web` + token). The debugpy dependency on `ms-python.python` is upstream behavior; the guest needs both.
+7. Webview sandbox = upstream policy; class-C resources are still served by the guest (allowed) and must never replace the app document (deny rules).
 
 ## Rollback
 
