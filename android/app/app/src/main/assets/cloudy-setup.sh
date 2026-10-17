@@ -29,10 +29,7 @@ mkdir -p "$BASE/data" "$BASE/extensions" "$UNITS"
 if [ "$DRY" = 0 ]; then
   sudo -v
   sudo apt-get update
-  sudo apt-get install -y --no-install-recommends python3 ca-certificates curl usbip || \
-    sudo apt-get install -y "linux-tools-$(uname -r)" || \
-    sudo apt-get install -y linux-tools-common || true
-  command -v usbip >/dev/null || echo "warning: usbip not installed; the auto-attach unit will not work" >&2
+  sudo apt-get install -y --no-install-recommends python3 ca-certificates curl
 fi
 
 cat > "$BASE/cloudy-serial-bridge.py" <<'PY'
@@ -666,27 +663,176 @@ case "$BACKEND" in
   *) echo "unknown backend: $BACKEND" >&2; exit 2;;
 esac
 
-# Root helper: attach the exported device through VHCI as soon as the relay
-# serves it. Runs as a system unit (needs root); harmless retry if vhci is
-# missing or the app has not connected yet.
+# Root helper: import the USB/IP device and attach it through VHCI. No usbip
+# CLI is required (the kernel sysfs interface is used directly).
+cat > "$BASE/cloudy-vhci-attach.py" <<'PY'
+#!/usr/bin/env python3
+"""Cloudy VHCI attach (no usbip CLI required).
+
+Imports the USB/IP device from the local relay (127.0.0.1:3240), then hands
+the connected socket to the kernel through the vhci sysfs interface:
+
+    echo "<port> <sockfd> <devid> <speed>" > .../vhci_hcd.0/attach
+
+Run as root (system unit). Requires the vhci_hcd module. Keeps the socket
+open for the kernel; when the device detaches (app/relay gone), it re-imports.
+
+Standard library only.
+"""
+import argparse
+import glob
+import os
+import socket
+import struct
+import sys
+import time
+
+VERSION = 0x0111
+OP_REQ_IMPORT = 0x8003
+VDEV_ST_NULL = 4
+VDEV_ST_NOTASSIGNED = 5
+VDEV_ST_USED = 6
+BUSID_DEFAULT = "cloudy-303a-1001"
+
+
+def recvn(sock, n):
+    buf = b""
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise EOFError("connection closed")
+        buf += chunk
+    return buf
+
+
+def vhci_dir():
+    candidates = sorted(glob.glob("/sys/devices/platform/vhci_hcd*"))
+    for path in candidates:
+        if os.path.exists(os.path.join(path, "attach")):
+            return path
+    return None
+
+
+def free_port(vdir):
+    status = os.path.join(vdir, "status")
+    try:
+        with open(status) as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 6 and parts[0] in ("hs", "ss"):
+                    port = int(parts[1])
+                    st = int(parts[2])
+                    if st == VDEV_ST_NULL:
+                        return port
+    except OSError:
+        return None
+    return None
+
+
+def port_status(vdir, port):
+    try:
+        with open(os.path.join(vdir, "status")) as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 6 and parts[0] in ("hs", "ss") and int(parts[1]) == port:
+                    return int(parts[2])
+    except OSError:
+        pass
+    return None
+
+
+def import_device(host, tcp_port, busid):
+    sock = socket.create_connection((host, tcp_port), timeout=4)
+    sock.sendall(struct.pack(">HHI", VERSION, OP_REQ_IMPORT, 0)
+                 + busid.encode().ljust(32, b"\0"))
+    ver, code, status = struct.unpack(">HHI", recvn(sock, 8))
+    if status != 0:
+        sock.close()
+        raise OSError(f"import rejected (status {status})")
+    dev = recvn(sock, 312)
+    busnum, devnum, speed = struct.unpack(">III", dev[288:300])
+    vid, pid = struct.unpack(">HH", dev[300:304])
+    devid = (busnum << 16) | devnum
+    return sock, devid, speed, vid, pid
+
+
+def detach(vdir, port):
+    try:
+        with open(os.path.join(vdir, "detach"), "w") as f:
+            f.write(str(port))
+    except OSError:
+        pass
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Cloudy VHCI attach")
+    ap.add_argument("--server", default="127.0.0.1")
+    ap.add_argument("--tcp-port", type=int, default=3240)
+    ap.add_argument("--busid", default=BUSID_DEFAULT)
+    ap.add_argument("--check", action="store_true",
+                    help="import once, print the device and exit (no sysfs)")
+    args = ap.parse_args()
+
+    if args.check:
+        sock, devid, speed, vid, pid = import_device(args.server, args.tcp_port, args.busid)
+        print(f"imported busid={args.busid} devid=0x{devid:08x} speed={speed} "
+              f"vid={vid:04x} pid={pid:04x}")
+        sock.close()
+        return
+
+    vdir = vhci_dir()
+    if not vdir:
+        print("vhci_hcd is not present (/sys/devices/platform/vhci_hcd*)", file=sys.stderr)
+        print("run: sudo modprobe vhci-hcd", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"vhci: {vdir}", flush=True)
+    while True:
+        port = free_port(vdir)
+        if port is None:
+            time.sleep(3)
+            continue
+        try:
+            sock, devid, speed, vid, pid = import_device(args.server, args.tcp_port, args.busid)
+        except Exception as e:
+            print(f"waiting for the relay: {e}", flush=True)
+            time.sleep(3)
+            continue
+        if speed == 0:
+            speed = 2  # full speed fallback
+        # The kernel takes over this socket; it must be blocking.
+        sock.settimeout(None)
+        attach = os.path.join(vdir, "attach")
+        try:
+            with open(attach, "w") as f:
+                f.write(f"{port} {sock.fileno()} {devid} {speed}")
+        except OSError as e:
+            print(f"attach write failed: {e}", file=sys.stderr, flush=True)
+            sock.close()
+            time.sleep(3)
+            continue
+        print(f"attached port={port} devid=0x{devid:08x} speed={speed} "
+              f"vid={vid:04x} pid={pid:04x}", flush=True)
+        # Keep the socket open for the kernel. NOTASSIGNED is normal until the
+        # device is probed; only NULL means the kernel detached the port.
+        while True:
+            time.sleep(3)
+            st = port_status(vdir, port)
+            if st == VDEV_ST_NULL or st is None:
+                print(f"port {port} detached (status {st})", flush=True)
+                break
+        detach(vdir, port)
+        sock.close()
+        time.sleep(1)
+
+
+if __name__ == "__main__":
+    main()
+PY
+chmod +x "$BASE/cloudy-vhci-attach.py"
 SYSDIR="/etc/systemd/system"
 if [ "$DRY" = 1 ]; then SYSDIR="$BASE/system"; fi
 mkdir -p "$SYSDIR" 2>/dev/null || true
-ATTACH_HELPER="$BASE/cloudy-usbip-attach.sh"
-cat > "$ATTACH_HELPER" <<'SH'
-#!/usr/bin/env bash
-set -u
-modprobe vhci-hcd 2>/dev/null || true
-BUSID="cloudy-303a-1001"
-while true; do
-  if usbip port 2>/dev/null | grep -q "$BUSID"; then sleep 5; continue; fi
-  if usbip list -r 127.0.0.1 2>/dev/null | grep -q "$BUSID"; then
-    usbip attach -r 127.0.0.1 -b "$BUSID" 2>/dev/null || true
-  fi
-  sleep 3
-done
-SH
-chmod +x "$ATTACH_HELPER"
 if [ "$DRY" = 1 ]; then
   cat > "$SYSDIR/cloudy-usbip-attach.service" <<UNIT
 [Unit]
@@ -694,7 +840,7 @@ Description=Cloudy USB/IP auto-attach (VHCI)
 After=network.target
 
 [Service]
-ExecStart=$ATTACH_HELPER
+ExecStart=$BASE/cloudy-vhci-attach.py
 Restart=always
 RestartSec=3
 
@@ -702,14 +848,15 @@ RestartSec=3
 WantedBy=multi-user.target
 UNIT
 else
-  sudo install -m 755 "$ATTACH_HELPER" /usr/local/bin/cloudy-usbip-attach
+  sudo install -m 755 "$BASE/cloudy-vhci-attach.py" /usr/local/bin/cloudy-vhci-attach
+  sudo modprobe vhci-hcd 2>/dev/null || echo "warning: vhci-hcd unavailable in this kernel" >&2
   sudo tee "$SYSDIR/cloudy-usbip-attach.service" >/dev/null <<UNIT
 [Unit]
 Description=Cloudy USB/IP auto-attach (VHCI)
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/cloudy-usbip-attach
+ExecStart=/usr/local/bin/cloudy-vhci-attach
 Restart=always
 RestartSec=3
 

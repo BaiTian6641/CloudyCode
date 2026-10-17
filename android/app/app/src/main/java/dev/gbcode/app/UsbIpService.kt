@@ -493,7 +493,7 @@ class UsbIpSession(
         b.put(busid); b.put(ByteArray(32 - busid.size))
         b.putInt(1) // busnum
         b.putInt(1) // devnum
-        b.putInt(1) // speed: full (12 Mbps)
+        b.putInt(2) // speed: full (12 Mbps)
         b.putShort(device.vendorId.toShort())
         b.putShort(device.productId.toShort())
         // UsbDevice.getVersion() is a string like "1.01" (not bcdDevice).
