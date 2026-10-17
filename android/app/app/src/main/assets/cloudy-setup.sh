@@ -3,6 +3,7 @@
 # backend, installed together as systemd user services with auto-start.
 #
 #   bash cloudy-setup.sh --token <app token> [--backend auto|reh-web|code-server|none]
+#                        [--with-usb]  (deferred USB forwarding experiment)
 #                        [--dry-run]
 #
 # The token is the app's connection token (copied by "Copy setup command").
@@ -10,12 +11,13 @@
 # services up. The Terminal app must stay open for the port forwards.
 set -euo pipefail
 
-TOKEN=""; BACKEND="auto"; DRY=0
+TOKEN=""; BACKEND="auto"; DRY=0; WITH_USB=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --token) TOKEN="${2:-}"; shift 2;;
     --backend) BACKEND="${2:-}"; shift 2;;
     --dry-run) DRY=1; shift;;
+    --with-usb) WITH_USB=1; shift;;
     *) echo "unknown argument: $1" >&2; exit 2;;
   esac
 done
@@ -663,6 +665,7 @@ case "$BACKEND" in
   *) echo "unknown backend: $BACKEND" >&2; exit 2;;
 esac
 
+if [ "$WITH_USB" = 1 ]; then
 # Root helper: import the USB/IP device and attach it through VHCI. No usbip
 # CLI is required (the kernel sysfs interface is used directly).
 cat > "$BASE/cloudy-vhci-attach.py" <<'PY'
@@ -935,10 +938,31 @@ UNIT
   sudo systemctl enable --now cloudy-usbip-attach.service 2>/dev/null || true
 fi
 
+fi
+
+# Default: USB forwarding is deferred. Remove/disable anything left from
+# earlier experimental setups so the VM carries only the backend.
+if [ "$WITH_USB" = 0 ]; then
+  systemctl --user disable --now cloudy-serial-bridge cloudy-usbip-relay 2>/dev/null || true
+  rm -f "$BASE/cloudy-serial-bridge.py" "$BASE/cloudy-usbip-relay.py" \
+        "$BASE/run-serial-bridge.sh" "$BASE/run-usbip-relay.sh" \
+        "$BASE/cloudy-vhci-attach.py" \
+        "$UNITS/cloudy-serial-bridge.service" "$UNITS/cloudy-usbip-relay.service"
+  if [ "$DRY" = 0 ]; then
+    sudo systemctl disable --now cloudy-usbip-attach 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/cloudy-usbip-attach.service /usr/local/bin/cloudy-vhci-attach 2>/dev/null || true
+    sudo systemctl daemon-reload 2>/dev/null || true
+  fi
+fi
+
 echo "== installed =="
 echo "token:        $BASE/token (mode 600)"
-echo "serial:       $BASE/cloudy-serial-bridge.py (guest 7001 -> RFC2217 7002)"
-echo "usb/ip:       $BASE/cloudy-usbip-relay.py (guest 3241 <- app; 127.0.0.1:3240 for usbip)"
+if [ "$WITH_USB" = 1 ]; then
+  echo "serial:       $BASE/cloudy-serial-bridge.py (guest 7001 -> RFC2217 7002)"
+  echo "usb/ip:       $BASE/cloudy-usbip-relay.py (guest 3241 <- app; 127.0.0.1:3240 for usbip)"
+else
+  echo "usb:          forwarding deferred (not installed; use --with-usb to experiment)"
+fi
 echo "backend:      $BACKEND"
 if [ "$DRY" = 1 ]; then
   echo "dry run: services written to $UNITS, not started"
@@ -946,7 +970,9 @@ if [ "$DRY" = 1 ]; then
 fi
 
 systemctl --user daemon-reload
-for u in cloudy-serial-bridge cloudy-usbip-relay cloudy-backend; do
+SERVICES="cloudy-backend"
+[ "$WITH_USB" = 1 ] && SERVICES="cloudy-serial-bridge cloudy-usbip-relay cloudy-backend"
+for u in $SERVICES; do
   if [ -f "$UNITS/$u.service" ]; then
     systemctl --user enable "$u.service" 2>/dev/null || true
     # Start now unless the service's port is already served by a manual process.
@@ -965,8 +991,9 @@ done
 loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER" 2>/dev/null || true
 
 echo
-echo "usb/ip attach: cloudy-usbip-attach.service (system) enabled; it attaches"
-echo "               cloudy-303a-1001 when the relay is ready; the guest gets /dev/ttyACM*"
+if [ "$WITH_USB" = 1 ]; then
+  echo "usb/ip attach: cloudy-usbip-attach.service (system) enabled"
+fi
 echo "services enabled; they start with the VM."
 echo "In the Terminal app keep this window open for the port forwards."
 echo "Next: open Cloudy Code (it connects on 8085 or 8080)."

@@ -218,6 +218,22 @@ Pivot (working today): the serial lane now supports **any** CDC device, not just
 
 Limits: only the first of the SLogic's four UART channels is forwarded; auto-reset depends on the SLogic mapping DTR/RTS to the target; a kernel TTY (for port pickers) requires platform USB passthrough, which this build does not provide.
 
+## Decision: USB forwarding is deferred (2026-10-17)
+
+After hands-on attempts with an ESP32-S3 and a SLogic UARTx4:
+
+- the Terminal build does **not** pass USB devices into the VM (empty `attachAllUsbDevices`, hotplug receiver never registered);
+- the VM kernel has **no `vhci_hcd`** (no sysfs/module), so USB/IP cannot attach;
+- the serial bridge works mechanically but is a fallback with limited ergonomics (no kernel TTY for port pickers, first channel only).
+
+Decision: **punt USB forwarding**. The product returns to the core: app-owned frontend, backend connection/reconnect, extension gallery, and the guest backend setup.
+
+- The app no longer exposes USB entries (startup button removed, notification action removed, no auto-start/claim).
+- `cloudy-setup.sh` defaults to **no USB services**; existing experimental units/files are disabled/removed on rerun. `--with-usb` re-enables the experiment.
+- USB code remains in the tree (diagnostic `UsbInventoryActivity`, serial/USB-IP services) for later work if the platform enables passthrough or a vhci-capable kernel.
+
+Revisit when Google ships USB passthrough in the Terminal VM or a vhci-capable guest kernel.
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).

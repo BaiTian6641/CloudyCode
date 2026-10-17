@@ -236,7 +236,6 @@ class WorkbenchActivity : Activity() {
         super.onResume()
         startMonitor()
         startDiscovery()
-        maybeStartUsbForwarding()
     }
 
     override fun onPause() {
@@ -354,27 +353,6 @@ class WorkbenchActivity : Activity() {
             true
         } catch (e: Exception) {
             false
-        }
-    }
-
-    /** Keep the USB/IP exporter running while the device is present. */
-    private fun maybeStartUsbForwarding() {
-        try {
-            // Googlebook: the Terminal app owns USB passthrough into the Linux
-            // VM. Our USB/IP exporter claims the device and would block that
-            // attach, so never auto-start it when the Terminal app exists.
-            if (packageManager.getLaunchIntentForPackage(
-                    "com.android.virtualization.terminal") != null) return
-            if (dev.gbcode.app.SerialBridgeService.state == "connected") return
-            val usb = getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager
-            val device = usb.deviceList.values.firstOrNull { it.vendorId == 0x303A } ?: return
-            if (!usb.hasPermission(device)) return
-            val app = application as GbCodeApp
-            startForegroundService(Intent(this, dev.gbcode.app.UsbIpService::class.java)
-                .setAction(dev.gbcode.app.UsbIpService.ACTION_START)
-                .putExtra(dev.gbcode.app.UsbIpService.EXTRA_TOKEN, app.connectionToken()))
-        } catch (e: Exception) {
-            android.util.Log.w("CloudyUsbIp", "auto-start failed: ${e.message}")
         }
     }
 
