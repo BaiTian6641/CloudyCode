@@ -23,7 +23,7 @@ xpra handles all X11 windows/dialogs/events, clipboard and keyboard/mouse input;
 
 | Piece | Detail |
 |---|---|
-| `tools/device/cloudy-x11-setup.sh` | Adds the official `xpra.org` Debian repository (the stock VM apt has no xpra candidate; key installed under `/usr/share/keyrings/xpra.asc`), installs `xpra`/`xvfb`, enables a systemd user unit (`cloudy-x11.service`) running `xpra start :100 --daemon=no --bind-tcp=0.0.0.0:14500 --html=on --tcp-auth=none`, linger enabled. Documents `DISPLAY=:100 firefox &`. |
+| `tools/device/cloudy-x11-setup.sh` | Adds the official `xpra.org` Debian repository (the stock VM apt has no xpra candidate; key installed under `/usr/share/keyrings/xpra.asc`), installs `xpra` + **`xpra-x11`** (seamless X11 support) + **`xpra-html5`** (the served client) + `xvfb`, enables a systemd user unit (`cloudy-x11.service`) running `xpra start :100 --daemon=no --bind-tcp=0.0.0.0:14500 --html=on --tcp-auth=none`, linger enabled. Documents `DISPLAY=:100 firefox &`. |
 | `X11Activity` | Cloudy X11 window. Polls `127.0.0.1:14500` off the main thread; when up, loads the HTML5 client. When down, shows a Cloudy setup card (Copy setup command / Open Terminal / Retry) and explains the flow. Restores the setup card after three failed probes. |
 | WebView hardening | Only `http://127.0.0.1:14500` may load: navigation override + subresource interception return an empty response for any other origin; file/content access off; no JavaScript/native bridge; network loads enabled only while the host is up. |
 | Entry points | Launcher alias **Cloudy X11** (separate launcher icon) and a startup-screen text action. Activity label `Cloudy X11`. |

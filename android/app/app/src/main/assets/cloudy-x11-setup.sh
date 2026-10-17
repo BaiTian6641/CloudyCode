@@ -27,7 +27,7 @@ curl -fsSL https://xpra.org/xpra.asc | sudo tee /usr/share/keyrings/xpra.asc >/d
 echo "deb [signed-by=/usr/share/keyrings/xpra.asc] https://xpra.org/ $CODENAME main" \
   | sudo tee /etc/apt/sources.list.d/xpra.list >/dev/null
 sudo apt-get update
-sudo apt-get install -y --no-install-recommends xpra xvfb x11-utils || {
+sudo apt-get install -y --no-install-recommends xpra xpra-x11 xpra-html5 xvfb x11-utils || {
   echo "xpra still unavailable; check the xpra.org repo for $CODENAME:" >&2
   apt-cache policy xpra >&2
   exit 1
