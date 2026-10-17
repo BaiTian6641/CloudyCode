@@ -23,7 +23,7 @@
             android:name=".ui.WorkbenchActivity"
             android:exported="false"
             android:launchMode="singleTop"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density" />
     </application>
 
 </manifest>

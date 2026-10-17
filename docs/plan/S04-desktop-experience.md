@@ -39,8 +39,9 @@ Dependencies below are effective for the stated profile, not stage-number order.
 **Deliverable:** `window/session manager`.
 
 - [ ] Handle resize/insets/caption chrome and persist lightweight window/workspace identity.
-- [ ] Create multiple workspace activities using supported APIs with one shared broker owner.
+  - Evidence (emulator, 2026-10-17): `density` added to `configChanges` — display-size changes no longer recreate the activity or change the origin; rotation already handled. **Open:** process death still creates a new ephemeral gateway port → new origin → editor tabs/settings lost. Resolve origin stability (stable port with conflict handling, stable loopback hostname, or state export/restore) before multi-window; see `docs/evidence/2026-10-17-S04-window-resize-emulator.md`.
 - [ ] Test resize, external display, window switching and closing one window while another remains active.
+- [ ] Create multiple workspace activities using supported APIs with one shared broker owner.
 - [ ] Keep the stock workbench as the entire main application surface; confine native setup to necessary platform interactions and no permanent replacement dashboard.
 
 - [ ] Verify Googlebook adaptive-app manifest/window requirements against the selected SDK, including resizability, caption insets, multiple instances, external displays and process recreation; do not hardcode phone orientation or screen size.
