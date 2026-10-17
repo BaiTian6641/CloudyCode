@@ -39,6 +39,11 @@ final class WsClient implements AutoCloseable {
     }
 
     static WsClient connect(String host, int port, String path, int timeoutMs) throws IOException {
+        return connect(host, port, path, timeoutMs, new String[0]);
+    }
+
+    static WsClient connect(String host, int port, String path, int timeoutMs,
+                            String[] extraHeaders) throws IOException {
         Socket socket = new Socket();
         socket.connect(new InetSocketAddress(host, port), timeoutMs);
         socket.setSoTimeout(timeoutMs);
@@ -48,13 +53,17 @@ final class WsClient implements AutoCloseable {
         byte[] keyBytes = new byte[16];
         new SecureRandom().nextBytes(keyBytes);
         String key = Base64.getEncoder().encodeToString(keyBytes);
-        String request = "GET " + path + " HTTP/1.1\r\n"
+        StringBuilder request = new StringBuilder("GET " + path + " HTTP/1.1\r\n"
                 + "Host: " + host + ":" + port + "\r\n"
                 + "Upgrade: websocket\r\n"
                 + "Connection: Upgrade\r\n"
                 + "Sec-WebSocket-Key: " + key + "\r\n"
-                + "Sec-WebSocket-Version: 13\r\n\r\n";
-        out.write(request.getBytes(StandardCharsets.US_ASCII));
+                + "Sec-WebSocket-Version: 13\r\n");
+        for (String header : extraHeaders) {
+            if (header != null && !header.isEmpty()) request.append(header).append("\r\n");
+        }
+        request.append("\r\n");
+        out.write(request.toString().getBytes(StandardCharsets.US_ASCII));
         out.flush();
 
         String statusLine = readAsciiLine(in);

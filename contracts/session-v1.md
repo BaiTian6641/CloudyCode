@@ -5,7 +5,7 @@
 ## 1. Roles and identities
 
 - **Guest**: `gbcode-sessiond` in the built-in Debian VM. Holds a persistent **server identity**: ed25519 keypair generated at first bootstrap, private key mode 0600 under `~/.config/gbcode/`, public key fingerprint = `SHA-256(raw public key)` shown to the user at bootstrap.
-- **App**: the GBCode APK. Holds a per-install **app identity**: ed25519 keypair generated on first run, private key in Android Keystore where supported.
+- **App**: the GBCode APK. Holds a per-install **app identity**: ed25519 keypair generated on first run. The 32-byte private seed is wrapped at rest by an Android Keystore AES-GCM key (the seed is decrypted into app memory only while signing); it is not itself a Keystore key.
 - **Session**: short-lived proof derived from an enrolled app identity. A session is not the pairing secret and not the device lease.
 
 ## 2. Pairing (one-time enrollment)
@@ -45,7 +45,7 @@ Token format: `v1.<payload64>.<sig64>` where payload = `{app, iat, exp, sid}` an
 
 ## 4. Message channel (WebSocket)
 
-`GET /channel?session=<token>` upgrades to RFC 6455. Frames:
+`GET /channel` upgrades to RFC 6455 with the session token in the `X-GBCode-Session: <token>` header. (A `?session=<token>` query form is accepted for compatibility with pre-freeze clients and is deprecated; it will be removed at freeze.) Frames:
 
 - **Control** (JSON, opcode 1): `{v:1, id:<u32>, op:<string>, payload:<object>}`; reply `{v:1, id, ok:true, payload}` or `{v:1, id, ok:false, error:{code, message, retriable}}`.
 - **Binary** (opcode 2): 8-byte header `{streamId:u32, seq:u32}` + payload; per-stream monotonic seq; receiver reports gaps.
@@ -57,7 +57,7 @@ Initial ops (S02.02 scope only): `session.hello`, `session.capabilities`, `sessi
 ## 5. Security invariants
 
 - No pairing endpoint outside an explicit enrollment window; no unauthenticated op except `/healthz`, `/pair`, `/session/challenge`, `/session`.
-- Credentials never in URLs beyond the single session-token upgrade query (to be moved to a header if the WebView path permits; recorded risk), never in logs, never in the shared workspace.
+- Credentials never in URLs (the session token rides the `X-GBCode-Session` upgrade header; the deprecated query form is accepted for pre-freeze clients only), never in logs, never in the shared workspace.
 - Server identity change (VM reset) requires re-pairing; unchanged port/folder names are not identity evidence.
 - Constant-time secret comparison; rate limiting on pairing; per-session replay protection via challenge nonces.
 

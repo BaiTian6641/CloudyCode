@@ -151,7 +151,17 @@ public final class Ed25519 {
         return sig;
     }
 
-    /** Verify an RFC 8032 signature (used by tests; the daemon verifies too). */
+    /**
+     * Verify an RFC 8032 signature (used by tests; the daemon verifies too).
+     *
+     * Constraints (security review GB-S02-008): this verifier rejects S >= L
+     * and invalid point encodings, but does not check canonical R/S encodings,
+     * small-order public keys, or use the cofactor form. That is sound here
+     * because every verified key is pinned transitively (the enrollment receipt
+     * binds SHA-256(server key); the app then verifies against its own pinned
+     * key), so no adversarially chosen key reaches verify(). Re-audit before
+     * reusing this primitive where keys arrive untrusted.
+     */
     public static boolean verify(byte[] publicKey, byte[] signature, byte[] message) {
         if (signature.length != 64) return false;
         byte[] rEnc = java.util.Arrays.copyOf(signature, 32);

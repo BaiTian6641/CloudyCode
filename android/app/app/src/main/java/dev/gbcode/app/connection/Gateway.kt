@@ -118,7 +118,9 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
                 return reject(client, 403, "Forbidden")
             }
 
-            android.util.Log.i(TAG, "request: $requestLine")
+            // Log method and path only: a query may carry tokens (contract §5
+            // forbids credentials in logs).
+            android.util.Log.i(TAG, "request: $method ${target.substringBefore('?')}")
 
             upstream = Socket()
             upstream.tcpNoDelay = true

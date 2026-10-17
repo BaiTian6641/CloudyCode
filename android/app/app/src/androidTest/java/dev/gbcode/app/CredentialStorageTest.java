@@ -101,6 +101,24 @@ public class CredentialStorageTest {
     }
 
     @Test
+    public void legacyPlaintextScrubsEvenWithoutServerPublicKey() {
+        app.savePairedState(state(PASSWORD));
+        // Simulate a pre-M1 install: plaintext password present, serverPublicKey
+        // (introduced by this lane) missing. The state is unusable, but the
+        // plaintext must still be migrated and removed from disk.
+        prefs.edit()
+                .remove("passwordEnc")
+                .remove("serverPublicKey")
+                .putString("backendPassword", PASSWORD)
+                .commit();
+
+        assertEquals(null, app.loadPairedState());
+        assertFalse("legacy plaintext key must be removed",
+                prefs.contains("backendPassword"));
+        assertTrue("encrypted entry must exist", prefs.contains("passwordEnc"));
+    }
+
+    @Test
     public void clearPairedStateRemovesPassword() {
         app.savePairedState(state(PASSWORD));
         assertTrue(prefs.contains("passwordEnc"));

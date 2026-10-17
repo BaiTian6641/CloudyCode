@@ -79,6 +79,10 @@ class GbCodeApp : Application() {
 
     fun loadPairedState(): PairedState? {
         val p = prefs()
+        // Migrate/scrub legacy plaintext first: pre-M1 installs have a
+        // plaintext password and may lack newer fields (serverPublicKey), so
+        // the scrub must not depend on any later early return.
+        val password = loadPassword(p)
         val seedEnc = p.getString("seedEnc", null) ?: return null
         val appHash = p.getString("appHash", null) ?: return null
         val daemon = p.getString("daemon", null) ?: return null
@@ -87,7 +91,6 @@ class GbCodeApp : Application() {
         val serverPublicKey = p.getString("serverPublicKey", null) ?: return null
         val seedBytes = dev.gbcode.app.connection.CredentialStore.decrypt(bytesOf(seedEnc))
         val seedHex = hexOf(seedBytes)
-        val password = loadPassword(p)
         return PairedState(seedHex, appHash, daemon, workbench, fp,
             serverPublicKey, password)
     }
@@ -115,6 +118,11 @@ class GbCodeApp : Application() {
     fun clearPairedState() {
         prefs().edit().clear().apply()
         backendPassword = null
+        // The backend session cookie is a credential too: it must not outlive
+        // the pairing state (S02.03).
+        val manager = android.webkit.CookieManager.getInstance()
+        manager.removeAllCookies(null)
+        manager.flush()
     }
 
     fun restoreFromPersisted(): Boolean {

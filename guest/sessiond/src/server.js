@@ -25,6 +25,7 @@ class SessionDaemon {
     this.enrollment = null; // { secret, expiresAt }
     this.apps = new Map();  // appHash -> { publicKeyRaw, enrolledAt }
     this.usedNonces = new Set();
+    this.consumedSecrets = new Set(); // sha256 of spent one-time pairing secrets
     this.pairAttempts = new Map(); // ip -> [timestamps]
     this.challenges = new Map();   // appHash -> { nonce, expiresAt }
     this.channelSockets = new Set();
@@ -120,6 +121,10 @@ class SessionDaemon {
       let body;
       try { body = JSON.parse(raw.toString("utf8")); } catch { return this.error(res, 400, "bad_request"); }
       const enr = this.enrollment;
+      if (typeof body.pairingSecret === "string" &&
+          this.consumedSecrets.has(sha256Hex(Buffer.from(body.pairingSecret, "utf8")))) {
+        return this.error(res, 403, "secret_consumed");
+      }
       if (!enr || Date.now() > enr.expiresAt) return this.error(res, 403, "pairing_closed");
       if (typeof body.pairingSecret !== "string" || !constantTimeEqual(body.pairingSecret, enr.secret)) {
         return this.error(res, 403, "secret_invalid");
@@ -138,6 +143,10 @@ class SessionDaemon {
       this.apps.set(appHash, { publicKeyRaw: body.appPublicKey, enrolledAt: new Date().toISOString(), label: String(body.appLabel || "").slice(0, 64) });
       this.saveApps();
       this.enrollment = null; // single use
+      // Remember the spent secret so a replay gets the contract's
+      // secret_consumed code instead of a generic failure (bounded set).
+      this.consumedSecrets.add(sha256Hex(Buffer.from(body.pairingSecret, "utf8")));
+      if (this.consumedSecrets.size > 4096) this.consumedSecrets.clear();
 
       const receiptSig = sign(this.identity.privateKey,
         Buffer.from("enroll"), Buffer.from(appHash, "hex"), Buffer.from(body.nonce, "utf8"));
@@ -222,6 +231,10 @@ class SessionDaemon {
         this.sendControl(socket, { v: 1, id: 0, ok: false, error: { code: "bad_frame", message: "invalid JSON", retriable: false } });
         return;
       }
+      if (typeof msg.v === "number" && msg.v !== 1) {
+        this.sendControl(socket, { v: 1, id: msg && typeof msg.id === "number" ? msg.id : 0, ok: false, error: { code: "unsupported_version", message: `v=${msg.v}`, retriable: false } });
+        return;
+      }
       if (msg.v !== 1 || typeof msg.id !== "number" || typeof msg.op !== "string") {
         this.sendControl(socket, { v: 1, id: msg && typeof msg.id === "number" ? msg.id : 0, ok: false, error: { code: "bad_frame", message: "need {v:1,id,op}", retriable: false } });
         return;
@@ -263,7 +276,11 @@ class SessionDaemon {
     server.on("upgrade", (req, socket) => {
       const url = new URL(req.url, "http://localhost");
       if (url.pathname !== "/channel") { socket.destroy(); return; }
-      const session = this.tokens.verify(url.searchParams.get("session"));
+      // Credentials never in URLs: the session token arrives in a header. The
+      // query form is accepted only for compatibility with pre-freeze clients
+      // and is deprecated (contracts/session-v1.md §5).
+      const token = req.headers["x-gbcode-session"] || url.searchParams.get("session");
+      const session = this.tokens.verify(token);
       if (!session) { socket.end("HTTP/1.1 403 Forbidden\r\n\r\n"); return; }
       this.handleChannel(req, socket, session);
     });

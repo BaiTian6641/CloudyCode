@@ -45,7 +45,7 @@ public final class SessionClient {
                 .put("v", 1)
                 .put("pairingSecret", pairingSecret)
                 .put("appPublicKey", b64u(keyPair.publicKey))
-                .put("appLabel", "gbcode-app")
+                .put("appLabel", "gbcode-apk")
                 .put("nonce", nonce), null);
         if (resp.getInt("__status") != 200) {
             throw new IllegalStateException("pair failed: " + resp);
@@ -243,13 +243,26 @@ public final class SessionClient {
         int colon = host.lastIndexOf(':');
         String hostname = colon > 0 ? host.substring(0, colon) : host;
         int port = colon > 0 ? Integer.parseInt(host.substring(colon + 1)) : 80;
-        try (WsClient ws = WsClient.connect(hostname, port,
-                "/channel?session=" + java.net.URLEncoder.encode(session, "UTF-8"), 10_000)) {
+        // Credentials never in URLs: the token rides a header (contract §5).
+        try (WsClient ws = WsClient.connect(hostname, port, "/channel", 10_000,
+                new String[] { "X-GBCode-Session: " + session })) {
             byte[] payload = "{\"v\":1,\"id\":1,\"op\":\"session.hello\",\"payload\":{\"echo\":\"from-apk\"}}"
                     .getBytes(StandardCharsets.UTF_8);
             ws.sendText(new String(payload, StandardCharsets.UTF_8));
             WsClient.Frame frame = ws.receive();
-            return new JSONObject(new String(frame.payload, StandardCharsets.UTF_8));
+            JSONObject hello = new JSONObject(new String(frame.payload, StandardCharsets.UTF_8));
+            // An error reply must never count as a successful identity check:
+            // only an ok:true hello carrying the server fingerprint proves the
+            // daemon answered on this channel.
+            if (!hello.optBoolean("ok", false)) {
+                throw new SecurityException("channel hello rejected: "
+                        + hello.optJSONObject("error"));
+            }
+            JSONObject payloadObj = hello.optJSONObject("payload");
+            if (payloadObj == null || payloadObj.optString("fingerprint", "").isEmpty()) {
+                throw new SecurityException("channel hello missing server fingerprint");
+            }
+            return hello;
         }
     }
 }

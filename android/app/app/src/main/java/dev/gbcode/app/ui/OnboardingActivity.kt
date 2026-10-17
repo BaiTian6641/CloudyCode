@@ -53,9 +53,13 @@ class OnboardingActivity : Activity() {
         workbenchField.hint = "workbench URL (http://127.0.0.1:8080)"
         secretField = EditText(this)
         secretField.setSingleLine(true)
+        secretField.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         secretField.hint = "one-time pairing secret"
         passwordField = EditText(this)
         passwordField.setSingleLine(true)
+        passwordField.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         passwordField.hint = "backend password (optional; stored locally, never in page JS)"
 
 
@@ -125,8 +129,10 @@ class OnboardingActivity : Activity() {
                 val client = SessionClient(state.daemonBase, Ed25519.fromSeed(seed))
                 val session = client.session(state.appHash, state.serverPublicKey)
                 val hello = client.channelHello(session)
-                val helloFingerprint = hello.optJSONObject("payload")?.optString("fingerprint")
-                if (helloFingerprint != null && helloFingerprint != state.fingerprint) {
+                // channelHello only returns an ok:true hello that carries a
+                // fingerprint; comparing is mandatory, not optional.
+                val helloFingerprint = hello.getJSONObject("payload").getString("fingerprint")
+                if (helloFingerprint != state.fingerprint) {
                     throw SecurityException("daemon identity changed since pairing")
                 }
                 runOnUiThread {
@@ -163,9 +169,11 @@ class OnboardingActivity : Activity() {
                 // fullFlow verified the signed enrollment receipt; the channel
                 // hello must agree with the signed fingerprint.
                 val fingerprint = result.getString("serverFingerprint")
-                val helloFingerprint = result.optJSONObject("hello")
-                    ?.optJSONObject("payload")?.optString("fingerprint")
-                if (helloFingerprint != null && helloFingerprint != fingerprint) {
+                // channelHello only returns an ok:true hello that carries a
+                // fingerprint; comparing is mandatory, not optional.
+                val helloFingerprint = result.getJSONObject("hello")
+                    .getJSONObject("payload").getString("fingerprint")
+                if (helloFingerprint != fingerprint) {
                     throw SecurityException("channel fingerprint differs from signed receipt")
                 }
                 runOnUiThread {

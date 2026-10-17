@@ -31,10 +31,11 @@ Protocol compatibility: `serverProof` is an additive field — old v1 peers igno
 
 | Suite | Command | Result |
 |---|---|---|
-| sessiond | `cd guest/sessiond && node --test test/*.test.js` | **26/26 pass** (protocol, authz, receipt/proof, vectors, fuzz) |
+| sessiond | `cd guest/sessiond && node --test test/*.test.js` | **27/27 pass** (protocol, authz, receipt/proof incl. call-site codes `secret_consumed`/`unsupported_version`, channel auth header + deprecated query form, vectors, fuzz) |
 | gateway (Node reference) | `cd guest/gateway && node --test test/*.test.js` | 5/5 pass |
-| instrumented (emulator only) | `ANDROID_SERIAL=emulator-5554 adb -s emulator-5554 install -r …` then `adb -s emulator-5554 shell am instrument -w dev.gbcode.app.test/androidx.test.runner.AndroidJUnitRunner` | **34/34 pass**: `GatewayTest` 15 (proxy/WS/keepalive/ports + 8 authorization cases), `ReceiptVerificationTest` 7, `ServerProofVerificationTest` 6, `CredentialStorageTest` 4, `CookiesTest` 2 |
+| instrumented (emulator only) | `ANDROID_SERIAL=emulator-5554 adb -s emulator-5554 install -r …` then `adb -s emulator-5554 shell am instrument -w dev.gbcode.app.test/androidx.test.runner.AndroidJUnitRunner` | **41/41 pass**: `GatewayTest` 15, `ReceiptVerificationTest` 7, `ServerProofVerificationTest` 6, `SessionClientCallSiteTest` 6, `CredentialStorageTest` 5, `CookiesTest` 2 |
 | builds | `gradle assembleDebug assembleDebugAndroidTest` (offline) | clean |
+| full suite | `tools/verify.sh` | ALL GREEN |
 
 `tools/verify.sh` was corrected to run on-device tests via `adb -s emulator-5554` + `am instrument` instead of gradle's `connectedDebugAndroidTest`, which walks every ddmlib-seen device (ANDROID_SERIAL is not a reliable filter) and could touch the hands-off physical unit.
 
@@ -52,16 +53,41 @@ Protocol compatibility: `serverProof` is an additive field — old v1 peers igno
 
 ## 4. Independent review
 
-Security and code reviews were run by separate reviewers (see the S02 review addendum below/next commit); findings and dispositions are recorded there. Implementation and review are separate agents per AGENTS.md.
+Implementer and reviewers were separate agents (AGENTS.md §2). Dispositions:
+
+**Code review (S02CodeReview):** 3 findings — all fixed in this lane.
+
+| Finding | Disposition |
+|---|---|
+| Channel-hello error replies could reach CONNECTED: `channelHello` never checked `ok`, and both call sites compared fingerprints only when present | **Fixed** — `channelHello` throws on `ok != true` or a missing fingerprint; `startPairing`/`authenticateRestored` now compare mandatorily |
+| Legacy password migration unreachable for pre-M1 installs (`serverPublicKey` early return precedes `loadPassword`) | **Fixed** — migration/scrub runs before any early return; fixture test `legacyPlaintextScrubsEvenWithoutServerPublicKey` |
+| Tests covered verification helpers but not their call sites | **Fixed** — `SessionClientCallSiteTest` (6 tests) drives `pair()`/`session()` against a stub daemon with valid, tampered and missing receipt/`serverProof` |
+
+**Security review (S02SecurityReview, independent):** all seven lane fixes confirmed closed; the three signed transcripts ("enroll"/"serverprove"/"session") use non-colliding domain prefixes and fixed-width fields. Findings GB-S02-001…009:
+
+| ID | Disposition |
+|---|---|
+| 001 Backend password POSTed to an unauthenticated loopback upstream (high) | **Open, design item** — remediation is daemon-mediated backend vouching/login (S02.05/S09); not implementable as a bounded fix here. Documented as the top residual |
+| 002 Gateway admission is reachability-based (low, by-design) | **Documented** — Host/Origin checks target browser/DNS-rebinding threats; a per-install gateway token is future work (ADR-0005 already states "a loopback port is not authentication") |
+| 003 Session token in the `/channel` URL query (low) | **Fixed** — token now rides the `X-GBCode-Session` upgrade header; the query form is accepted server-side only for pre-freeze clients and is deprecated (contract §4/§5 updated) |
+| 004 Unpairing left WebView cookies (low) | **Fixed** — `clearPairedState` clears CookieManager |
+| 005 Unmasked credential fields (low) | **Fixed** — password input type on the secret and password fields |
+| 006 Gateway logged the full request line incl. query (low) | **Fixed** — logs method + path without the query string |
+| 007 Debug intent-extra prefill (low, debug-only) | **Accepted for the debug lane** — release builds ignore the extras; visual prefill flagging noted as future |
+| 008 Ed25519 verifier strictness (informational) | **Documented** — constraints recorded next to `verify()`; keys are pinned transitively in this lane; re-audit before reuse with untrusted keys |
+| 009 Contract/implementation divergences (informational) | **Fixed** — `secret_consumed` on replay, `unsupported_version` for unknown major versions, `appLabel: gbcode-apk`, key-storage wording corrected in the contract |
 
 ## 5. Remaining limitations (not fixed here)
 
-1. **Local non-browser clients:** the gateway binds loopback and validates browser-level Host/Origin, but a native app on the same device can forge those headers. A per-install gateway token/lease remains S02.05 work.
-2. **Session token in the WebSocket URL query** (`contracts/session-v1.md` §5 recorded risk) — still present.
+1. **Local non-browser clients (GB-S02-002):** the gateway binds loopback and validates browser-level Host/Origin, but a native app on the same device can forge those headers. A per-install gateway token/lease remains S02.05 work.
+2. **Backend identity (GB-S02-001, top residual):** the password is POSTed to whatever process owns the backend port; daemon-mediated backend vouching or guest-side login is the designed remediation (S02.05/S09).
 3. **Remote/TLS backends** are rejected rather than supported; a reviewed TLS design is future work.
 4. **Revocation UI** and revoked-identity reconnect tests are not implemented (S09).
 5. **Bridge adversarial fixture** (malicious iframe/oversized-message runtime tests) pending; current coverage is code-level allowlist + platform origin filter + explicit check.
-6. **Physical-lane acceptance** (pairing over the real Terminal route, LAN exposure, local-network permission matrix, VM-reset re-pairing) is blocked on device release.
+6. **Debug intent-extra prefill (GB-S02-007)** remains debug-lane-only by design; visual flagging of pre-filled values is future work.
+7. **Physical-lane acceptance** (pairing over the real Terminal route, LAN exposure, local-network permission matrix, VM-reset re-pairing) is blocked on device release.
+
+(Previously listed residuals now closed: session token moved to the `X-GBCode-Session` header (GB-S02-003); unpair clears cookies (GB-S02-004); credential fields masked (GB-S02-005); request-line query stripped from logs (GB-S02-006); contract error codes/label/key-storage wording conformed (GB-S02-009).)
 
 ## 6. Rollback
 

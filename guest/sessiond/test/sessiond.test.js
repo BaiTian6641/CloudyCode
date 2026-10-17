@@ -127,12 +127,12 @@ test("pairing rejects wrong secret and consumes on success", async () => {
   assert.equal(good.status, 200);
   assert.equal(good.body.serverFingerprint, daemon.fingerprintHex);
 
-  // single use: second attempt with same secret must fail
+  // single use: replaying the consumed secret reports the contract code
   const again = await request(port, "POST", "/pair", {
     pairingSecret: secret, appPublicKey: b64u(appRaw), nonce: "nonce-abcdef-3",
   });
   assert.equal(again.status, 403);
-  assert.equal(again.body.error.code, "pairing_closed");
+  assert.equal(again.body.error.code, "secret_consumed");
 
   await new Promise((r) => server.close(r));
 });
@@ -212,6 +212,13 @@ test("channel: hello, capabilities, unsupported op, bad frame", async () => {
   assert.equal(un.ok, false);
   assert.equal(un.error.code, "unsupported_op");
 
+  sendControl(socket, { v: 3, id: 4, op: "session.hello" });
+  frame = await readFrame(socket, rest);
+  rest = frame.rest;
+  const ver = JSON.parse(frame.payload.toString("utf8"));
+  assert.equal(ver.ok, false);
+  assert.equal(ver.error.code, "unsupported_version");
+
   sendControl(socket, "not-json");
   // sending a string (invalid JSON frame content) — build raw masked frame
   const rawPayload = Buffer.from("not-json");
@@ -226,6 +233,51 @@ test("channel: hello, capabilities, unsupported op, bad frame", async () => {
   assert.equal(bad.error.code, "bad_frame");
 
   socket.destroy();
+  await daemon.shutdown(server);
+});
+
+test("channel accepts the session header; deprecated query form still works", async () => {
+  const { daemon, server, port } = await setup();
+  const secret = daemon.openEnrollment();
+  const appKeys = crypto.generateKeyPairSync("ed25519");
+  const appRaw = appKeys.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
+  const pair = await request(port, "POST", "/pair", {
+    pairingSecret: secret, appPublicKey: b64u(appRaw), nonce: "nonce-hdr-1",
+  });
+  const appHash = pair.body.enrolledApp;
+  const ch = await request(port, "GET", `/session/challenge?app=${appHash}`);
+  const sig = crypto.sign(null, Buffer.concat([Buffer.from("session"), Buffer.from(ch.body.challenge, "utf8")]), appKeys.privateKey);
+  const sess = await request(port, "POST", "/session",
+    { challenge: ch.body.challenge, appSig: b64u(sig) }, { "x-gbcode-app": appHash });
+  const token = sess.body.session;
+
+  // Header form (contract §4): credentials never in URLs.
+  const key = crypto.randomBytes(16).toString("base64");
+  const socket = net.connect(port, "127.0.0.1");
+  await new Promise((r) => socket.on("connect", r));
+  socket.write(`GET /channel HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n`
+    + `Upgrade: websocket\r\nConnection: Upgrade\r\n`
+    + `Sec-WebSocket-Key: ${key}\r\nSec-WebSocket-Version: 13\r\n`
+    + `X-GBCode-Session: ${token}\r\n\r\n`);
+  const head = await new Promise((resolve, reject) => {
+    let buf = Buffer.alloc(0);
+    socket.on("data", (c) => {
+      buf = Buffer.concat([buf, c]);
+      const end = buf.indexOf("\r\n\r\n");
+      if (end !== -1) resolve(buf.subarray(0, end).toString("latin1"));
+    });
+    socket.on("error", reject);
+  });
+  assert.ok(head.includes("101"), head);
+  socket.destroy();
+
+  // Deprecated query form (pre-freeze clients) must still authenticate.
+  const q = await connectWs(port, token);
+  q.socket.destroy();
+
+  // No token at all must fail.
+  await assert.rejects(connectWs(port, null));
+
   await daemon.shutdown(server);
 });
 
