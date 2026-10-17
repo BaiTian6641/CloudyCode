@@ -1,7 +1,7 @@
 {
   "name": "gbcode-conformance",
   "displayName": "GBCode Conformance",
-  "version": "0.3.1",
+  "version": "0.3.3",
   "publisher": "gbcode",
   "license": "MIT",
   "engines": {

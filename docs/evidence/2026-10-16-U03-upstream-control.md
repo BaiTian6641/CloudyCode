@@ -11,13 +11,13 @@
 | Workbench in Chromium (token auth) | PASS | PASS (password) | PASS (token) |
 | Conformance extension: command, child_process, webview CSP, tree, output | PASS | PASS | PASS |
 | Reported `extensionKind` for Node host | "ui" | "ui" | "ui" |
-| **Extension-created terminal spawn** (`createTerminal`/`terminal.new`, processId, sendText execution) | **PASS** — pid resolves, `GBCODE_CTRL_OK` written, transcript captured | **STALL** — pid never resolves, ptyhost log empty | **STALL** — same |
+| **Extension-created terminal spawn** (`createTerminal`/`terminal.new`, processId, sendText execution) | **PASS** — pid resolves, `GBCODE_CTRL_OK` written, transcript captured | **Corrected 2026-10-17: PASS** on a trusted folder (pid + marker); the earlier STALL was Workspace Trust gating, not the backend | **Corrected 2026-10-17: PASS** — pid + marker on a trusted folder |
 | Workspace Trust on `/tmp/gbcode-ws` | Restricted (`isTrusted:false`) | Restricted | Auto-trusted |
 | Bundled Node | v24.21.0 | v24.21.0 | v22.21.1 |
 
 ## Findings
 
-1. **Extension-host terminal stall is a candidate regression, not upstream.** Decisive via the control: pristine 1.141.0 spawns correctly. Recorded in ADR-0004 as a required code-server patch/investigation item and upgrade re-test. GBCode companion-extension design must account for it (browser-path creation, daemon-managed terminals, or patching code-server).
+1. ~~Extension-host terminal stall is a candidate regression, not upstream.~~ **Retracted 2026-10-17**: controlled A/B on one code-server instance shows terminal creation is gated by Workspace Trust (Restricted Mode prompt "Creating a terminal process requires executing code"); after granting trust the same extension spawns a terminal (pid + sendText). OpenVSCode likewise passes on a trusted folder. Earlier rows compared different trust states at trigger time (`docs/evidence/2026-10-17-U03-terminal-trust-correction.md`). No backend patch is required; the product must handle first-run trust explicitly.
 2. `extensionKind: "ui"` for server-side Node execution is upstream behavior in the server-distro topology (present on all three); U03.03 must measure actual process placement, not the label.
 3. Restricted-Mode behavior of the control matches code-server; OpenVSCode's auto-trust is the outlier to document in U03.
 4. Control build excludes Copilot by overlay; all OSS surfaces present (built-in extensions list includes ipynb, git, debug, Emmet, etc.).

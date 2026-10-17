@@ -16,9 +16,9 @@ Two maintained candidates were pinned in `versions.lock.json` with verified dige
 Workstation and emulator evidence (docs/evidence/2026-10-16-S01-*.md):
 
 - Both: authenticated login, real workbench in browser and **in Android WebView** (code-server lane), integrated terminal executing commands, VSIX installation, conformance extension with webview/CSP/tree/output, Workspace Trust enforcement.
-- Both candidates: extension-host terminal creation stalls (`processId` never resolves; ptyhost log empty). Initially recorded as shared upstream behavior; **the pristine control later proved it a candidate regression** (see "Explicitly not decided"). Browser/user-path terminals work on both candidates and on pristine upstream.
+- Both candidates initially showed extension-created terminal stalls (`processId` never resolves; ptyhost log empty). **Corrected 2026-10-17:** a controlled A/B on one code-server instance shows the stall is Workspace Trust gating terminal creation in Restricted Mode — not a backend regression (`docs/evidence/2026-10-17-U03-terminal-trust-correction.md`). With the folder trusted, code-server, OpenVSCode and pristine all spawn extension terminals correctly.
 - OpenVSCode differences: ~8-month-older runtime (1.109.5, Node 22), minimal-patch objective (smaller audit surface), auto-trusted a folder code-server restricted, Docker default is unauthenticated (we require explicit token), token honored via `--connection-token-file`.
-- code-server differences: current upstream (1.141.0, Node 24), `--enable-remote-storage` option (needs secret-storage audit, E13), self-hosted webviews (needs origin audit, E12), Coder promo banner + agent sidebar (removable), Restricted Mode honored. **Regression found after U03.01: extension-host terminal creation stalls on code-server 4.141.0 (and OpenVSCode 1.109.5) but works on pristine upstream 1.141.0 — see below.**
+- code-server differences: current upstream (1.141.0, Node 24), `--enable-remote-storage` option (audited, E13), self-hosted webviews (audited, E12), Coder promo banner + agent sidebar (removable), Restricted Mode honored.
 
 ## Evidence accumulated after the provisional selection (2026-10-16)
 
@@ -27,7 +27,7 @@ Workstation and emulator evidence (docs/evidence/2026-10-16-S01-*.md):
 | Authenticated workbench (Chromium) | PASS | PASS | PASS |
 | Workbench in Android WebView (emulator) | PASS — full slice (login, terminal command, conformance webview) | PASS — workbench + extension active | (not run in APK; same upstream server) |
 | Terminal execution (browser path) | PASS | PASS | PASS |
-| Extension-host terminal spawn | **STALL (regression)** | **STALL (regression)** | **PASS** |
+| Extension-host terminal spawn | PASS — pid resolves, `GBCODE_CTRL_OK` written, transcript captured | PASS — pid + marker after folder trust (untrusted blocks creation by design) | PASS — pid + marker (transcript unavailable: proposed API) |
 | Workspace Trust | Restricted honored | auto-trusted folder | Restricted honored |
 | Notebook renderer, offline (vscode-cdn.net unresolvable) | **PASS** — SW-served, markdown + code cell render | not tested | **FAIL** — renderer module fetch from CDN authority |
 | Conformance extension (webview/CSP/tree/output/workspace.fs) | PASS | PASS | PASS |
@@ -35,24 +35,23 @@ Workstation and emulator evidence (docs/evidence/2026-10-16-S01-*.md):
 | Structural parity vs control | Ports panel extra | older upstream baseline | reference |
 | Guest ARM64 package | official artifact (verified digest) | official artifact (verified digest) | built from source (overlay) |
 
-The provisional choice stands: current upstream, active maintenance, verified digests. The terminal-spawn regression is tracked as a required patch/investigation item (S09.02 dependency) and re-test at each candidate upgrade.
+The provisional choice stands: current upstream, active maintenance, verified digests. No backend patch is required for extension terminals; trust gating must be handled by the product flow (user grants trust once; automation must not spawn terminals while untrusted). Re-test at each candidate upgrade.
 
 ## Decision
 
 **Develop against code-server 4.141.0** (pinned commit/artifacts in `versions.lock.json`), with OpenVSCode Server retained as the documented fallback. Selection rationale:
 
 1. Security freshness and maintenance cadence outweigh the smaller patch surface of a release 8 months behind upstream (upstream review §3.1 rule: smaller patch set never overrides missing fixes).
-2. Workstation + emulator behavior is equal on the measured surfaces; the one differentiator observed (extension-host terminal stall) affects both.
+2. Workstation + emulator behavior is equal on the measured surfaces; workspace-trust gating of terminals and the extension-host placement label behave the same on all three, so neither differentiates the candidates.
 3. code-server's additional patches are known and bounded (webview origin, secret storage, product overrides); they become explicit S02.03/U03 review items rather than unknowns.
 4. Offline notebook viability is already solved on code-server: with `vscode-cdn.net` unresolvable on the host, notebook renderer resources were served by its webview service worker and the notebook rendered correctly, while the pristine control failed on the same fixture (`docs/evidence/2026-10-16-U03-notebook-lane.md`). A self-contained Googlebook needs exactly this; a stock build would require writing the same patch ourselves.
 
 **Fallback trigger:** switch to OpenVSCode only via a new ADR if code-server shows a blocker it cannot resolve with a maintainable patch (e.g., webview origin model incompatible with the native-bridge isolation requirement, or unmaintainable upgrade cost measured in U03).
 
 ## Explicitly not decided here
-- Extension-host terminal stall is a **candidate regression, not upstream**: pristine Code - OSS 1.141.0 reh-web spawns extension-created terminals correctly (pid + sendText execution verified, `docs/evidence/U03-conformance-upstream-control.json`, trigger t13). code-server 4.141.0 and OpenVSCode 1.109.5 both stall (`processId` never resolves, ptyhost log empty). This becomes a required code-server patch/investigation item before S09.02 daemon-managed terminal flows depend on it, and a re-test item at each candidate upgrade. User/browser-path terminal creation works on all three.
+- **Retracted:** the earlier "extension-host terminal stall regression" claim. Re-tested 2026-10-17 with an isolated A/B on one code-server instance: terminal creation is gated by Workspace Trust; after "Trust Folder & Continue" the same extension spawns a terminal (pid + sendText), and OpenVSCode passes on a trusted workspace too (`docs/evidence/2026-10-17-U03-terminal-trust-correction.md`). No backend patch is needed. Consequence: the product must handle first-run trust explicitly, and automation must not spawn terminals while the folder is untrusted.
 - No production approval: the physical Terminal-VM lane (guest ARM64 package, forwarding behavior, Terminal lifecycle) is untested and remains a release gate (S01.06 exit, S09).
 - No Marketplace/proprietary enablement: registry stays Open VSX/VSIX per ADR-0002.
-- Extension-host terminal stall is accepted as a design constraint: interactive terminals are browser-path (user) or guest-daemon managed; the companion extension must not rely on server-side interactive terminal spawning (recorded for S02.02 and S09.02).
 
 ## Consequences
 

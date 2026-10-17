@@ -112,8 +112,8 @@ function activate(context) {
   vscode.window.registerTreeDataProvider("gbcodeConformance.status", treeProvider);
 
   // --- Server-side trigger bridge (vertical-slice automation) ---
-  const triggerDir = path.join(os.tmpdir(), "gbcode-slice-triggers");
-  const resultDir = path.join(os.tmpdir(), "gbcode-slice-results");
+  const triggerDir = process.env.GBCODE_TRIGGER_DIR || path.join(os.tmpdir(), "gbcode-slice-triggers");
+  const resultDir = process.env.GBCODE_RESULT_DIR || path.join(os.tmpdir(), "gbcode-slice-results");
   fs.mkdirSync(triggerDir, { recursive: true });
   fs.mkdirSync(resultDir, { recursive: true });
   output.appendLine("watching triggers in " + triggerDir);
@@ -127,21 +127,32 @@ function activate(context) {
       return;
     }
     const result = { trigger, ts: new Date().toISOString(), ok: false, detail: null };
+    // onDidWriteTerminalData is a proposed API on older engines (e.g. 1.109);
+    // an unguarded call throws and aborts the whole trigger.
+    const subscribeTerminalData = (term, sink) => {
+      try {
+        if (vscode.window.onDidWriteTerminalData) {
+          return vscode.window.onDidWriteTerminalData((e) => {
+            if (e.terminal === term) sink(e.data);
+          });
+        }
+      } catch (e) {
+        // proposal not enabled on this engine
+      }
+      return { dispose() {} };
+    };
     try {
       if (trigger.action === "terminal-cmd") {
-        // Use the workbench command (same path as user palette) instead of the
-        // raw createTerminal API, whose lazy pty spawn stalls in web servers.
+        // Use the workbench command (same path as user palette) rather than the
+        // raw createTerminal API: terminal.new also opens the panel, and both
+        // paths are gated by workspace trust when the folder is untrusted.
         const target = trigger.target || path.join(os.tmpdir(), "gbcode-cmd.txt");
         const marker = trigger.marker || "GBCODE_CMD";
         await vscode.commands.executeCommand("workbench.action.terminal.new");
         const term = vscode.window.activeTerminal;
         if (!term) throw new Error("no activeTerminal after terminal.new");
         let transcript = "";
-        const dataSub = vscode.window.onDidWriteTerminalData
-            ? vscode.window.onDidWriteTerminalData((e) => {
-                if (e.terminal === term) transcript += e.data;
-              })
-            : { dispose() {} };
+        const dataSub = subscribeTerminalData(term, (d) => { transcript += d; });
         let pid = "pending";
         term.processId.then((p) => { pid = String(p); }, () => { pid = "reject"; });
         setTimeout(() => term.sendText(`echo ${marker} > ${target}`, true), 4000);
@@ -170,11 +181,7 @@ function activate(context) {
           (e) => { pidResolved = "reject:" + e.message; }
         );
         let transcript = "";
-        const dataSub = vscode.window.onDidWriteTerminalData
-            ? vscode.window.onDidWriteTerminalData((e) => {
-                if (e.terminal === term) transcript += e.data;
-              })
-            : { dispose() {} };
+        const dataSub = subscribeTerminalData(term, (d) => { transcript += d; });
         const target = trigger.target || path.join(os.tmpdir(), "gbcode-dbg.txt");
         const marker = trigger.marker || "GBCODE_DBG";
         setTimeout(() => term.sendText(`echo ${marker} > ${target}`, true), 3000);
@@ -196,11 +203,7 @@ function activate(context) {
         result.ok = written === marker;
       } else if (trigger.action === "terminal-mark") {
         let transcript = "";
-        const dataSub = vscode.window.onDidWriteTerminalData
-            ? vscode.window.onDidWriteTerminalData((e) => {
-                if (e.terminal === term) transcript += e.data;
-              })
-            : { dispose() {} };
+        const dataSub = subscribeTerminalData(term, (d) => { transcript += d; });
         // Shell startup lags; sendText queues input, so poll for the side effect.
         setTimeout(() => term.sendText(`echo ${marker} > ${target}`, true), 2500);
         const deadline = Date.now() + 15000;
