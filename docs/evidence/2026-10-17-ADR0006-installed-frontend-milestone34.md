@@ -54,6 +54,26 @@ Evidence: `ADR0006-startup-backend-started.png`; app log lines; `ss -ltnp`; gues
 
 Limitation: starting the **VM itself** (and the daemon inside it) is the Googlebook-platform lane — no public third-party API was found. This orchestration assumes the daemon already runs in the Linux environment (real Terminal VM, or the workstation lane here).
 
+## Platform constraint: Terminal command endpoint requires a privileged app (verified on HP Googlebook 14, Android 17 / build CL3B)
+
+The Googlebook Terminal app (`com.android.virtualization.terminal`, APK `VmTerminalAppGoogle`) exposes a command endpoint: `android.intent.action.VIEW` with `android-terminal://start?cmd=<command>&background=true` (`EXTRA_GO_BACKGROUND` also accepted), handled by `TerminalIntentActivity`. It installs/initializes the VM when needed, validates the command (ASCII only; blocks `<<`, forkbombs, base64-piped shells, function definitions, `&`/`bg`), and shows a user dialog to allow the calling app to run it. The caller must be an **activity started for result** (`getCallingPackage()`).
+
+**But the component is protected:** `com.android.virtualization.terminal.permission.MANAGE_TERMINAL`, protection level `signature|preinstalled`.
+
+- A sideloaded APK is denied at start: `Permission Denial: starting Intent { … cmp=com.android.virtualization.terminal/.new2.ui.TerminalIntentActivity … } from ProcessRecord{… dev.gbcode.app} … requires com.android.virtualization.terminal.permission.MANAGE_TERMINAL`.
+- `pm grant dev.gbcode.app …MANAGE_TERMINAL` fails: "not a changeable permission type".
+- `adb shell am start` (shell UID) is denied too.
+
+Consequences for the launch flow:
+
+| Path | Status |
+|---|---|
+| App executes the backend command in the VM (desired step 2) | **Requires a preinstalled/partner build** holding `MANAGE_TERMINAL`. Code path implemented (`StartupActivity`), cannot work sideloaded. |
+| Auto-connect when the backend is already running | **Works today**: startup probes `127.0.0.1:8085` and opens the workbench connected (the Terminal app forwards guest ports to Android loopback). |
+| One-time setup without the permission | The user starts the backend once in the Terminal; the VM can keep it running (systemd user service), so every later GBCode launch connects automatically. |
+
+Also noted: `resolveActivity()` for the scheme is masked by Android 11 package visibility even with a `<queries>` entry; implicit launch must be attempted and `ActivityNotFoundException` handled. The app now declares the permission (harmless on sideload, effective if preinstalled) and gates the intent on `checkSelfPermission`.
+
 ## Tests
 
 `tools/verify.sh` → ALL GREEN. sessiond 27/27; gateway 5/5; instrumented 47/47 (emulator only), including `WebAssetGatewayTest` with the renderer's new parameters.

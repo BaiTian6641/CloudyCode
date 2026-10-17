@@ -121,6 +121,28 @@ class GbCodeApp : Application() {
     }
 
     /**
+     * Connection token for the guest IDE backend started by app launch. The
+     * token is generated once, stored Keystore-encrypted, and passed to the
+     * in-VM start command as an argument (never in a URL).
+     */
+    fun connectionToken(): String {
+        val p = prefs()
+        p.getString("tokenEnc", null)?.let { enc ->
+            return String(
+                dev.gbcode.app.connection.CredentialStore.decrypt(tokenAlias, bytesOf(enc)),
+                Charsets.UTF_8)
+        }
+        val bytes = ByteArray(24).also { java.security.SecureRandom().nextBytes(it) }
+        val token = hexOf(bytes)
+        p.edit().putString("tokenEnc", hexOf(
+            dev.gbcode.app.connection.CredentialStore.encrypt(
+                tokenAlias, token.toByteArray(Charsets.UTF_8)))).apply()
+        return token
+    }
+
+    private val tokenAlias = "gbcode-connection-token"
+
+    /**
      * Decrypt the stored backend password; a legacy plaintext value (written
      * before S02.03) is migrated once and removed from disk.
      */

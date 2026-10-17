@@ -2,6 +2,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Only granted to a preinstalled/partner build (signature|preinstalled). -->
+    <uses-permission android:name="com.android.virtualization.terminal.permission.MANAGE_TERMINAL" />
+
+    <!-- Android 11+ package visibility: resolve the Googlebook Terminal
+         command-intent endpoint (android-terminal://start). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="android-terminal" />
+        </intent>
+    </queries>
 
     <application
         android:name=".GbCodeApp"
@@ -14,7 +25,7 @@
         android:supportsRtl="true"
         android:resizeableActivity="true">
         <activity
-            android:name=".ui.OnboardingActivity"
+            android:name=".ui.StartupActivity"
             android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>
@@ -22,6 +33,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".ui.OnboardingActivity"
+            android:exported="true"
+            android:launchMode="singleTask" />
         <activity
             android:name=".ui.WorkbenchActivity"
             android:exported="false"
