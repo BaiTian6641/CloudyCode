@@ -28,22 +28,6 @@ class WorkbenchActivity : Activity() {
         super.onCreate(savedInstanceState)
         val app = application as GbCodeApp
 
-        // ADR-0006: the workbench is app-owned. Core assets and bootstrap come
-        // from the APK; a paired backend only supplies the guest IDE services.
-        // Without a backend the installed workbench still starts (palette,
-        // settings, untitled editor) from packaged assets alone.
-        val webAssets = dev.gbcode.app.web.WebAssets(assets)
-        val template = webAssets.readText("out/vs/code/browser/workbench/workbench.html")
-        if (template == null) {
-            val msg = "packaged workbench assets missing (run tools/release/package-web-assets.sh)"
-            android.util.Log.e("GBCodeWorkbench", msg)
-            val errorView = android.widget.TextView(this)
-            errorView.text = "GBCode: $msg"
-            errorView.setPadding(48, 96, 48, 48)
-            setContentView(errorView)
-            return
-        }
-
         var upstreamHost: String? = null
         var upstreamPort = 0
         val backend = app.backendBaseUrl
@@ -75,21 +59,42 @@ class WorkbenchActivity : Activity() {
         // ADR-0006: only the installed-frontend + pristine reh-web guest sets a
         // remote authority (the app-owned page connects to the guest's remote
         // agent through the gateway). The code-server baseline keeps its
-        // guest-hosted page semantics: no remote authority, native login.
+        // guest-hosted page semantics: the gateway proxies the guest page and
+        // the native login hands the WebView only the session cookie.
         val installedFrontend = app.backendKind == "reh-web"
-        gateway = Gateway(upstreamHost, upstreamPort, webAssets) { nonce ->
-            val authority = if (upstreamHost != null && installedFrontend) {
-                "127.0.0.1:${gateway?.port ?: PREFERRED_GATEWAY_PORT}"
-            } else null
-            renderWorkbench(
-                template,
+        val proxyMode = !installedFrontend && upstreamHost != null
+        // App-owned assets are only needed for the installed frontend. In
+        // code-server mode the guest serves the whole page through the gateway.
+        val webAssets = if (proxyMode) null else dev.gbcode.app.web.WebAssets(assets)
+        val template = webAssets?.readText("out/vs/code/browser/workbench/workbench.html")
+        if (!proxyMode && template == null) {
+            val msg = "packaged workbench assets missing (run tools/release/package-web-assets.sh)"
+            android.util.Log.e("GBCodeWorkbench", msg)
+            val errorView = android.widget.TextView(this)
+            errorView.text = "GBCode: $msg"
+            errorView.setPadding(48, 96, 48, 48)
+            setContentView(errorView)
+            return
+        }
+        if (proxyMode) {
+            gateway = Gateway(upstreamHost, upstreamPort, null)
+                .also { it.start(PREFERRED_GATEWAY_PORT) }
+        } else {
+            val pageTemplate = template!!
+            gateway = Gateway(upstreamHost, upstreamPort, webAssets) { nonce ->
+                val authority = if (upstreamHost != null && installedFrontend) {
+                    "127.0.0.1:${gateway?.port ?: PREFERRED_GATEWAY_PORT}"
+                } else null
+                renderWorkbench(
+                    pageTemplate,
                 authority,
-                if (authority != null) app.backendPassword else null,
-                if (authority != null) app.guestFolder else null,
-                "http://127.0.0.1:${gateway?.port ?: PREFERRED_GATEWAY_PORT}/out/vs/workbench/contrib/webview/browser/pre/",
-                nonce,
-            )
-        }.also { it.start(PREFERRED_GATEWAY_PORT) }
+                    if (authority != null) app.backendPassword else null,
+                    if (authority != null) app.guestFolder else null,
+                    "http://127.0.0.1:${gateway?.port ?: PREFERRED_GATEWAY_PORT}/out/vs/workbench/contrib/webview/browser/pre/",
+                    nonce,
+                )
+            }.also { it.start(PREFERRED_GATEWAY_PORT) }
+        }
         val origin = "http://127.0.0.1:${gateway!!.port}"
 
         if (BuildConfig.DEBUG) {

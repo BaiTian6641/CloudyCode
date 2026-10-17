@@ -1,14 +1,17 @@
 package dev.gbcode.app.ui
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -16,41 +19,51 @@ import android.widget.TextView
 import dev.gbcode.app.GbCodeApp
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Launch flow (the product path):
  *
  * 1. The user opens the app.
- * 2. If the guest backend is not running, the app executes a command in the
- *    Linux environment through the Terminal app's documented command intent
- *    (`android-terminal://start?cmd=…&background=true`). The Terminal app
- *    installs/initializes the VM when needed and asks the user to allow the
- *    command; the VM runs it in the background.
- * 3. The app waits for the backend port (the Terminal app forwards guest
- *    ports to Android loopback), then opens the workbench connected to it.
- * 4. The user works normally.
- *
- * The app-owned workbench remains available offline if no Linux environment
- * is present; onboarding (manual daemon pairing) stays as the advanced path.
+ * 2. If the guest backend is not running, the app shows the one-time setup:
+ *    the Terminal command endpoint is protected by the platform
+ *    signature|preinstalled permission MANAGE_TERMINAL, so a sideloaded APK
+ *    cannot run the command itself. The page offers the exact setup command
+ *    and opens the Terminal; it keeps checking the forwarded ports.
+ * 3. As soon as the backend (code-server on 8080, or the pinned reh-web on
+ *    8085) is reachable, the workbench opens connected.
+ * 4. The user works normally. A preinstalled/partner build holds the
+ *    permission and can run the Terminal command intent itself.
  */
 class StartupActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var detail: TextView
     private lateinit var retry: Button
+    private lateinit var copySetup: Button
     private lateinit var openTerminal: Button
     private lateinit var offline: Button
     private lateinit var advanced: Button
 
     private val handler = Handler(Looper.getMainLooper())
+    private val probe = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "gbcode-startup-probe").apply { isDaemon = true }
+    }
+    private val pollBoth = AtomicBoolean(false)
     private var probeMode = false
+    private var forceIntent = false
     private var targetPort = BACKEND_PORT
-    private var deadlineAt = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         probeMode = intent.getBooleanExtra("probe", false)
+        forceIntent = intent.getBooleanExtra("force_intent", false)
         if (probeMode) targetPort = PROBE_PORT
+        buildUi()
+        begin()
+    }
 
+    private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 64, 48, 48)
@@ -72,7 +85,20 @@ class StartupActivity : Activity() {
         }
         retry = Button(this).apply {
             text = "Retry"
-            setOnClickListener { begin() }
+            setOnClickListener {
+                pollBoth.set(false)
+                handler.removeCallbacks(setupPoll)
+                begin()
+            }
+        }
+        copySetup = Button(this).apply {
+            text = "Copy setup command"
+            setOnClickListener {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("GBCode setup", SETUP_COMMAND))
+                setDetail("Command copied. Paste it in the Terminal; this screen continues " +
+                    "by itself when the server is available.")
+            }
         }
         openTerminal = Button(this).apply {
             text = "Open Terminal (one-time backend setup)"
@@ -97,12 +123,12 @@ class StartupActivity : Activity() {
         root.addView(detail)
         val scroll = ScrollView(this).apply { addView(root) }
         root.addView(retry)
+        root.addView(copySetup)
         root.addView(openTerminal)
         root.addView(offline)
         root.addView(advanced)
         setContentView(scroll)
         setButtonsVisible(false)
-        begin()
     }
 
     private fun begin() {
@@ -110,45 +136,83 @@ class StartupActivity : Activity() {
         val app = application as GbCodeApp
         val token = app.connectionToken()
         setStatus("Checking the Linux environment…")
-
         if (probeMode) {
-            if (portOpen(targetPort)) {
-                setStatus("Probe server already running on port $targetPort")
-                setDetail("Terminal intent + port forwarding verified (probe mode).")
-                return
+            probe.execute {
+                val up = portOpen(targetPort)
+                runOnUiThread {
+                    if (up) {
+                        setStatus("Probe server is reachable on 127.0.0.1:$PROBE_PORT")
+                        setDetail("Terminal command intent executed in the VM and the guest " +
+                            "port is forwarded to the app.")
+                    } else if (hasManageTerminal() || forceIntent) {
+                        launchTerminalCommand(
+                            "python3 -m http.server $PROBE_PORT --bind 0.0.0.0")
+                        awaitPort()
+                    } else {
+                        setStatus("Probe requires the preinstalled Terminal permission.")
+                        setDetail("MANAGE_TERMINAL is signature|preinstalled; sideloaded " +
+                            "apps are denied (verified on this device).")
+                        setButtonsVisible(true)
+                    }
+                }
             }
-            if (!hasManageTerminal()) {
-                setStatus("Probe requires the preinstalled Terminal permission.")
-                setDetail("MANAGE_TERMINAL is signature|preinstalled; side loaded apps are denied.")
-                setButtonsVisible(true)
-                return
-            }
-            launchTerminalCommand("python3 -m http.server $PROBE_PORT --bind 0.0.0.0")
-            awaitPort()
             return
         }
+        probe.execute {
+            val rehUp = portOpen(BACKEND_PORT)
+            val csUp = !rehUp && portOpen(CODE_SERVER_PORT)
+            runOnUiThread {
+                when {
+                    rehUp -> {
+                        setStatus("Backend is running; connecting…")
+                        connect(app, token)
+                    }
+                    csUp -> {
+                        setStatus("code-server is running; connecting…")
+                        connectCodeServer(app)
+                    }
+                    else -> setupState()
+                }
+            }
+        }
+    }
 
-        if (portOpen(targetPort)) {
-            setStatus("Backend already running; connecting…")
-            connect(app, token)
-            return
-        }
-        // The Terminal command endpoint is protected by the platform
-        // signature|preinstalled permission MANAGE_TERMINAL: a sideloaded APK
-        // gets "Permission Denial" (verified on the real device). Only a
-        // preinstalled/partner build can start the VM command itself.
-        if (hasManageTerminal()) {
+    private fun setupState() {
+        // The privileged command path is only usable by a preinstalled build.
+        if (hasManageTerminal() || forceIntent) {
             launchTerminalCommand(
-                "\$HOME/.local/bin/gbcode-start-backend --token $token --port $BACKEND_PORT")
+                "\$HOME/.local/bin/gbcode-start-backend --token " +
+                    "${(application as GbCodeApp).connectionToken()} --port $BACKEND_PORT")
             awaitPort()
             return
         }
-        setStatus("The Linux backend is not running.")
+        setStatus("One-time setup: start the Linux backend")
         setDetail(
-            "Android allows only the privileged Terminal API to start commands in the VM. " +
-                "Run GBCode's backend once in the Terminal (one-time setup); after that it " +
-                "starts with the VM and this screen connects automatically on every launch.")
+            "Android only lets the preinstalled Terminal API run commands in the VM " +
+                "MANAGE_TERMINAL is signature|preinstalled). Use 'Copy setup command' and " +
+                "run it once in the Terminal. This screen keeps checking and continues " +
+                "by itself as soon as the server is available.")
         setButtonsVisible(true)
+        pollBoth.set(true)
+        handler.postDelayed(setupPoll, 1500)
+    }
+
+    private val setupPoll: Runnable = object : Runnable {
+        override fun run() {
+            if (!pollBoth.get()) return
+            probe.execute {
+                val rehUp = portOpen(BACKEND_PORT)
+                val csUp = !rehUp && portOpen(CODE_SERVER_PORT)
+                runOnUiThread {
+                    val app = application as GbCodeApp
+                    when {
+                        rehUp -> connect(app, app.connectionToken())
+                        csUp -> connectCodeServer(app)
+                        pollBoth.get() -> handler.postDelayed(setupPoll, 1500)
+                    }
+                }
+            }
+        }
     }
 
     private fun launchTerminalCommand(command: String) {
@@ -156,63 +220,33 @@ class StartupActivity : Activity() {
             "android-terminal://start?cmd=" + Uri.encode(command) + "&background=true")
         val intent = Intent(Intent.ACTION_VIEW, uri)
             .putExtra("com.android.virtualization.terminal.EXTRA_GO_BACKGROUND", true)
-        // resolveActivity() is gated by package visibility; launching an
-        // implicit intent is not. Attempt it and treat a missing handler as
-        // "no Linux environment".
         try {
-            // The Terminal app requires an activity started for result
-            // (it reads getCallingPackage()/getLaunchedFromUid()).
+            // The Terminal app requires an activity started for result (it
+            // reads getCallingPackage()/getLaunchedFromUid()).
             startActivityForResult(intent, REQ_TERMINAL)
             setStatus("Starting the Linux environment…")
-            setDetail("Approve the command in the Terminal dialog to let GBCode start its backend.")
+            setDetail("Approve the command in the Terminal dialog.")
+        } catch (e: SecurityException) {
+            setStatus("The Terminal command endpoint is privileged (MANAGE_TERMINAL).")
+            setDetail("A sideloaded APK cannot use it; use 'Copy setup command' and run " +
+                "it once in the Terminal. This screen continues when the server is up.")
+            setButtonsVisible(true)
+            pollBoth.set(true)
+            handler.postDelayed(setupPoll, 1500)
         } catch (e: android.content.ActivityNotFoundException) {
             setStatus("No Linux environment available on this device.")
-            setDetail("The Terminal app was not found; install the Googlebook Linux Terminal.")
+            setDetail("The Terminal app was not found.")
             setButtonsVisible(true)
         }
     }
 
     private fun awaitPort() {
-        deadlineAt = System.currentTimeMillis() + WAIT_MS
-        handler.postDelayed(pollRunnable, 700)
-    }
-
-    private val pollRunnable = object : Runnable {
-        override fun run() {
-            val up = portOpen(targetPort)
-            if (up) {
-                onPortUp()
-                return
-            }
-            if (System.currentTimeMillis() >= deadlineAt) {
-                setStatus("The backend did not start in time.")
-                setDetail(
-                    if (probeMode) "Probe failed: no listener on port $targetPort."
-                    else "The Terminal app may still be installing the VM, or the start " +
-                        "command is not provisioned in this VM. Retry, continue offline, " +
-                        "or use the advanced setup.")
-                setButtonsVisible(true)
-                return
-            }
-            handler.postDelayed(this, 500)
-        }
-    }
-
-    private fun onPortUp() {
-        handler.removeCallbacks(pollRunnable)
-        if (probeMode) {
-            setStatus("Probe server is reachable on 127.0.0.1:$PROBE_PORT")
-            setDetail("Terminal command intent executed in the VM and the guest port is " +
-                "forwarded to the app. The full flow is viable.")
-            setButtonsVisible(false)
-            return
-        }
-        val app = application as GbCodeApp
-        setStatus("Backend is up; connecting…")
-        connect(app, app.connectionToken())
+        pollBoth.set(true)
+        handler.postDelayed(setupPoll, 700)
     }
 
     private fun connect(app: GbCodeApp, token: String) {
+        pollBoth.set(false)
         app.backendBaseUrl = "http://127.0.0.1:$BACKEND_PORT"
         app.backendKind = "reh-web"
         app.backendPassword = token
@@ -221,40 +255,16 @@ class StartupActivity : Activity() {
         finish()
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_TERMINAL) {
-            Log.i("GBCodeStartup", "terminal intent result: $resultCode")
-            setDetail("Terminal accepted the command (result $resultCode); waiting for the backend…")
-        }
+    private fun connectCodeServer(app: GbCodeApp) {
+        pollBoth.set(false)
+        app.backendBaseUrl = "http://127.0.0.1:$CODE_SERVER_PORT"
+        app.backendKind = "code-server"
+        app.backendPassword = null
+        app.guestFolder = null
+        app.setState(dev.gbcode.app.ConnectionState.CONNECTED)
+        startActivity(Intent(this, WorkbenchActivity::class.java))
+        finish()
     }
-
-    override fun onDestroy() {
-        handler.removeCallbacks(pollRunnable)
-        super.onDestroy()
-    }
-
-    private fun setStatus(text: String) {
-        runOnUiThread { statusText.text = text }
-    }
-
-    private fun setDetail(text: String) {
-        runOnUiThread { detail.text = text }
-    }
-
-    /** Off-main-thread TCP probe of a loopback port. */
-    private fun portOpen(port: Int): Boolean {
-        return try {
-            Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), 300) }
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun hasManageTerminal(): Boolean =
-        checkSelfPermission("com.android.virtualization.terminal.permission.MANAGE_TERMINAL") ==
-            android.content.pm.PackageManager.PERMISSION_GRANTED
 
     private fun openTerminalApp() {
         val launch = packageManager.getLaunchIntentForPackage("com.android.virtualization.terminal")
@@ -269,19 +279,62 @@ class StartupActivity : Activity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_TERMINAL) {
+            Log.i("GBCodeStartup", "terminal intent result: $resultCode")
+            setDetail("Terminal accepted the command (result $resultCode); waiting for the backend…")
+        }
+    }
+
+    override fun onDestroy() {
+        pollBoth.set(false)
+        handler.removeCallbacks(setupPoll)
+        probe.shutdownNow()
+        super.onDestroy()
+    }
+
+    private fun hasManageTerminal(): Boolean =
+        checkSelfPermission("com.android.virtualization.terminal.permission.MANAGE_TERMINAL") ==
+            PackageManager.PERMISSION_GRANTED
+
+    /** Off-main-thread TCP probe of a loopback port. */
+    private fun portOpen(port: Int): Boolean {
+        return try {
+            Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), 400) }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun setStatus(text: String) {
+        runOnUiThread { statusText.text = text }
+    }
+
+    private fun setDetail(text: String) {
+        runOnUiThread { detail.text = text }
+    }
+
     private fun setButtonsVisible(visible: Boolean) {
+        val v = if (visible) LinearLayout.VISIBLE else LinearLayout.GONE
         runOnUiThread {
-            retry.visibility = if (visible) LinearLayout.VISIBLE else LinearLayout.GONE
-            openTerminal.visibility = if (visible) LinearLayout.VISIBLE else LinearLayout.GONE
-            offline.visibility = if (visible) LinearLayout.VISIBLE else LinearLayout.GONE
-            advanced.visibility = if (visible) LinearLayout.VISIBLE else LinearLayout.GONE
+            retry.visibility = v
+            copySetup.visibility = v
+            openTerminal.visibility = v
+            offline.visibility = v
+            advanced.visibility = v
         }
     }
 
     companion object {
         private const val REQ_TERMINAL = 41
         private const val BACKEND_PORT = 8085
+        private const val CODE_SERVER_PORT = 8080
         private const val PROBE_PORT = 18080
-        private const val WAIT_MS = 180_000L
+        private const val SETUP_COMMAND =
+            "curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone " +
+                "--prefix=\$HOME/.local && nohup \$HOME/.local/bin/code-server " +
+                "--bind-addr 0.0.0.0:8080 --auth none >\$HOME/code-server.log 2>&1 &"
     }
 }

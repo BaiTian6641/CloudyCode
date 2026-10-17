@@ -74,6 +74,36 @@ Consequences for the launch flow:
 
 Also noted: `resolveActivity()` for the scheme is masked by Android 11 package visibility even with a `<queries>` entry; implicit launch must be attempted and `ActivityNotFoundException` handled. The app now declares the permission (harmless on sideload, effective if preinstalled) and gates the intent on `checkSelfPermission`.
 
+## Sideloaded launch flow (implemented and verified on the HP Googlebook 14)
+
+User-approved design (2026-10-17): on first setup the user runs a command in the Terminal to install **code-server**; when the server is available the app continues startup by itself.
+
+`StartupActivity` (launcher) does:
+
+1. Probe the forwarded ports off the main thread (main-thread probes throw `NetworkOnMainThreadException`, which silently reads as "closed" — found and fixed): pinned reh-web `8085`, then code-server `8080`.
+2. If either is up: open the workbench connected (reh-web = installed frontend + remote agent; code-server = proxy-mode workbench, guest page through the app-origin gateway).
+3. If neither is up: one-time setup page with **Copy setup command**, **Open Terminal**, Retry, offline workbench and advanced pairing. The page keeps polling and continues automatically when the server appears.
+4. The privileged Terminal command intent (`android-terminal://start?cmd=…&background=true`) is attempted only if the build holds `MANAGE_TERMINAL` (preinstalled); a sideloaded build gets `SecurityException`/Permission Denial by design.
+
+Setup command offered by the page (user runs once in the Terminal):
+
+```
+curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=$HOME/.local   && nohup $HOME/.local/bin/code-server --bind-addr 0.0.0.0:8080 --auth none >$HOME/code-server.log 2>&1 &
+```
+
+Signing experiment (per user request): the app was signed with a new 4096-bit release key and reinstalled. The denial persists — the Terminal endpoint requires `MANAGE_TERMINAL`, and the Terminal app is signed by **Google** (cert SHA-256 `21049340…`), while our release cert is `fa670962…`; `pm grant` is refused ("not a changeable permission type"). Only a preinstalled/partner build can use the command intent.
+
+Verified with a real code-server 4.141.0 on the workstation, exposed into the device loopback with `adb reverse tcp:8080 tcp:8080` (stands in for the VM-forwarded port):
+
+| Step | Result |
+|---|---|
+| Launch with backend down | setup page shown (Copy/Open Terminal/offline/advanced) |
+| Server appears while the page is open | app transitions to WorkbenchActivity within ~6 s and loads the guest page (gateway request trace) |
+| Launch with server already up | connects immediately; code-server Welcome renders (activity bar, welcome, status bar) through the app-origin gateway |
+| Sideloaded privileged intent | denied (SecurityException/Permission Denial) — expected |
+
+Security note: the interim code-server lane uses `--auth none` on a forwarded loopback port (dev lane). Production keeps the authenticated reh-web/pairing path.
+
 ## Tests
 
 `tools/verify.sh` → ALL GREEN. sessiond 27/27; gateway 5/5; instrumented 47/47 (emulator only), including `WebAssetGatewayTest` with the renderer's new parameters.
