@@ -159,7 +159,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 - [ ] Test extension update rollback and workbench/backend compatibility checks.
 
 - [ ] Verify settings, keybindings, profiles, extension state and secrets separately after reconnect, APK update, renderer death and browser-origin change. If choosing code-server remote storage, review encryption/fallback semantics rather than assume disk persistence implies encrypted secrets.
-  - Evidence (workstation lane, 2026-10-17): with `--enable-remote-storage`, `ExtensionContext.secrets` values persist **plaintext** in `User/globalStorage/state.vscdb` (default file mode 0644); without the flag they are memory-only. Do not enable the flag in the default profile until a secret-storage design exists (`docs/audit/E13-secret-storage.md`).
+  - Evidence (workstation lane, 2026-10-17): with `--enable-remote-storage`, `ExtensionContext.secrets` values persist **plaintext** in `User/globalStorage/state.vscdb` (default file mode 0644); without the flag they are memory-only. Do not enable the flag in the default profile until a secret-storage design exists (`docs/audit/E13-secret-storage.md`). Also without the flag, the browser workbench's user settings/theme are browser-local — editing the guest `User/settings.json` did not change the client theme (`docs/evidence/2026-10-17-U03-registry-install-code-server.md`). APK WebView profile data is therefore user data, not disposable cache.
 
 **Accept:** Core local workflows remain usable offline; network-required optional features fail clearly.
 
