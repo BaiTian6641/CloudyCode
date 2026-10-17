@@ -19,9 +19,17 @@ mkdir -p "$BASE" "$HOME/.config/systemd/user"
 (umask 077; printf '%s' "$TOKEN" > "$BASE/x11-token")
 
 sudo -v
+# xpra is not in the stock VM apt sources: add the official xpra.org repo.
+. /etc/os-release
+CODENAME="${VERSION_CODENAME:-bookworm}"
+sudo install -d -m 0755 /usr/share/keyrings
+curl -fsSL https://xpra.org/xpra.asc | sudo tee /usr/share/keyrings/xpra.asc >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/xpra.asc] https://xpra.org/ $CODENAME main" \
+  | sudo tee /etc/apt/sources.list.d/xpra.list >/dev/null
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends xpra xvfb x11-utils || {
-  echo "xpra is not available from apt; install it manually (xpra.org) and re-run" >&2
+  echo "xpra still unavailable; check the xpra.org repo for $CODENAME:" >&2
+  apt-cache policy xpra >&2
   exit 1
 }
 
