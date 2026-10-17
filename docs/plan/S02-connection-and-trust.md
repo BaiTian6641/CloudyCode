@@ -2,7 +2,7 @@
 
 [Plan index](README.md) · [Architecture specification](../Googlebook_CodeOSS_APK_Engineering_Plan_v2.md)
 
-**Status:** planned; no implementation or device acceptance is claimed. **Default profile:** `wsl_usbip_desktop`. **Packages:** 6 scheduled, 0 excluded alternatives.
+**Status:** workstation/emulator lanes implemented and tested (evidence: `../evidence/2026-10-17-S02-workstation-lane.md`); physical-lane acceptance blocked on device release. No S02 acceptance is claimed from emulator evidence. **Default profile:** `wsl_usbip_desktop`. **Packages:** 6 scheduled, 0 excluded alternatives.
 
 **Purpose:** Replace experiment-only plumbing with reviewed pairing, bounded protocols and secure origin handling.
 
@@ -30,7 +30,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 
 **Implement pairing and identity lifecycle**
 
-**Status:** Planned; not started.
+**Status:** implemented (workstation/emulator, 2026-10-17); physical acceptance pending. `SessionClient` verifies the signed enrollment receipt and the per-session daemon proof; full app hash is persisted (the prior display-truncation bug is fixed); seed and backend password are Keystore-encrypted.
 
 **Dependencies (default):** [S00.03](S00-platform-feasibility.md#s0003), [S01.06](S01-workbench-vertical-slice.md#s0106)
 
@@ -39,6 +39,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 **Deliverable:** `pairing implementation and threat tests`.
 
 - [ ] Define enrollment, high-entropy one-time secret handling, server identity verification, app identity and revocation.
+  - Evidence: 32-byte single-use secret, constant-time compare, 5/min rate limit (`guest/sessiond`, 26 tests); server identity verified per session via `serverProof` (contract §3, additive v1); wrong key/nonce/app-hash cases reject (`ReceiptVerificationTest`, `ServerProofVerificationTest`). **Open:** revocation UI and revoked-identity reconnect test (S09), physical re-pairing after VM reset.
 - [ ] Use reviewed cryptographic libraries and Android key storage; keep credentials out of URLs, workspaces and normal logs.
 - [ ] Test wrong identity, expired/reused secret, concurrent pairing, reset and explicit re-pairing.
 
@@ -54,7 +55,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 
 **Implement the guest session daemon**
 
-**Status:** Planned; not started.
+**Status:** implemented (workstation, 2026-10-17); physical acceptance pending. `guest/sessiond` runs as a non-root guest process, binds loopback, and serves typed errors; 26 tests green (protocol, authz, receipt/proof, vectors, fuzz).
 
 **Dependencies (default):** [S01.06](S01-workbench-vertical-slice.md#s0106), [S02.01](S02-connection-and-trust.md#s0201)
 
@@ -76,7 +77,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 
 **Choose and implement the production origin topology**
 
-**Status:** Planned; not started. Physical-device evidence required.
+**Status:** workstation/emulator lanes implemented (2026-10-17); physical-device evidence required. ADR-0005 fixes the app-local loopback origin (`127.0.0.1:41873`) with conflict fallback; the gateway authorizes Host/Origin/method per request and forwards only to loopback HTTP backends.
 
 **Dependencies (default):** [S00.04](S00-platform-feasibility.md#s0004), [S02.01](S02-connection-and-trust.md#s0201), [S02.02](S02-connection-and-trust.md#s0202)
 
@@ -103,7 +104,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 
 **Implement the constrained native integration bridge**
 
-**Status:** Planned; not started.
+**Status:** partially implemented (2026-10-17); adversarial fixture pending. `NativeBridge` uses `WebViewCompat.addWebMessageListener` with the exact gateway origin, an explicit origin-equality check, main-frame-only delivery, 16 KiB message cap, schema parse and an allowlisted method set (no exec/file/USB primitives).
 
 **Dependencies (default):** [S02.03](S02-connection-and-trust.md#s0203)
 
@@ -125,7 +126,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 
 **Implement endpoint and port authorization**
 
-**Status:** Planned; not started. Physical-device evidence required.
+**Status:** workstation/emulator lanes implemented (2026-10-17); physical-device evidence required (LAN/local-network permission matrix). Sessiond and gateway bind loopback only; the gateway rejects foreign Host/Origin and non-allowlisted methods before any upstream contact; upstream is loopback-only. Instrumented and live emulator probes cover rejection paths.
 
 **Dependencies (default):** [S02.02](S02-connection-and-trust.md#s0202), [S02.03](S02-connection-and-trust.md#s0203)
 
@@ -146,7 +147,7 @@ Dependencies below are effective for the stated profile, not stage-number order.
 
 **Freeze protocol schemas and compatibility tests**
 
-**Status:** Planned; not started.
+**Status:** in progress (2026-10-17). `contracts/session-v1.md` is the authoritative draft; this lane added the additive `serverProof` field (§3) with the compatibility rule, exercised by shared golden vectors (`contracts/test-vectors/session-v1.json`, plus the receipt/proof vectors pinned in `ReceiptVerificationTest`/`ServerProofVerificationTest`). Formal freeze remains open.
 
 **Dependencies (default):** [S02.01](S02-connection-and-trust.md#s0201), [S02.02](S02-connection-and-trust.md#s0202), [S02.04](S02-connection-and-trust.md#s0204)
 

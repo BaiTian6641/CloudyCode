@@ -32,9 +32,16 @@ step "probe APK builds"
 step "production app build"
 "$GRADLE" -p android/app :app:assembleDebug --console=plain -q || fail=1
 
-step "gateway instrumentation (emulator only)"
+step "gateway + pairing instrumentation (emulator only)"
+# Scope with `adb -s` + `am instrument`: gradle's connected task walks every
+# device ddmlib sees and ANDROID_SERIAL is not a reliable filter there, so it
+# can touch the hands-off physical unit. This form can only reach the emulator.
 if adb -s emulator-5554 get-state >/dev/null 2>&1; then
-  ANDROID_SERIAL=emulator-5554 "$GRADLE" -p android/app :app:connectedDebugAndroidTest --console=plain -q || fail=1
+  export ANDROID_SERIAL=emulator-5554
+  "$GRADLE" -p android/app :app:assembleDebug :app:assembleDebugAndroidTest --console=plain -q || fail=1
+  adb -s emulator-5554 install -r android/app/app/build/outputs/apk/debug/app-debug.apk >/dev/null || fail=1
+  adb -s emulator-5554 install -r android/app/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk >/dev/null || fail=1
+  adb -s emulator-5554 shell am instrument -w dev.gbcode.app.test/androidx.test.runner.AndroidJUnitRunner || fail=1
 else
   echo "emulator-5554 not running; skipping on-device tests"
 fi

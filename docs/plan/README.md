@@ -2,7 +2,7 @@
 
 **Reviewed:** 2026-10-16. **Product:** an independently branded, full desktop Code - OSS IDE for Google's Android-based Googlebook, delivered as an ordinary Android APK and executing development workloads in Google's built-in Debian Terminal VM. **Default profile:** `wsl_usbip_desktop`.
 
-**Current state:** planning and source research only. No APK, daemon, extension, exporter, guest probe or device evidence is implemented by this handoff. No Googlebook hardware was exercised. Backend selection and every physical capability remain unapproved. Git initialization is repository setup, not an implementation milestone.
+**Current state:** implementation exists and is verified on this workstation and Google's Android emulator: production APK shell (pairing with verified enrollment receipts, authenticated reconnect, Keystore-encrypted credentials, origin-authorized gateway), `guest/sessiond` (26 tests), `guest/gateway` (5 tests), guest bootstrap/doctor tooling, the conformance extension, pinned backend builds and the evidence under `docs/evidence/`. No Googlebook hardware has been exercised — the physical unit is owned by another project. Backend selection is provisional (ADR-0004) and every physical capability (Terminal VM route, VHCI/USB, desktop input/windowing) remains unapproved. Emulator passes are labeled `emulator` and never promoted to platform capability claims.
 
 ## How to use this plan
 
