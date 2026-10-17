@@ -29,6 +29,7 @@ Workstation and emulator evidence (docs/evidence/2026-10-16-S01-*.md):
 | Terminal execution (browser path) | PASS | PASS | PASS |
 | Extension-host terminal spawn | **STALL (regression)** | **STALL (regression)** | **PASS** |
 | Workspace Trust | Restricted honored | auto-trusted folder | Restricted honored |
+| Notebook renderer, offline (vscode-cdn.net unresolvable) | **PASS** — SW-served, markdown + code cell render | not tested | **FAIL** — renderer module fetch from CDN authority |
 | Conformance extension (webview/CSP/tree/output/workspace.fs) | PASS | PASS | PASS |
 | Cold start median (this host) | 264 ms | not re-measured | 261 ms |
 | Structural parity vs control | Ports panel extra | older upstream baseline | reference |
@@ -43,6 +44,7 @@ The provisional choice stands: current upstream, active maintenance, verified di
 1. Security freshness and maintenance cadence outweigh the smaller patch surface of a release 8 months behind upstream (upstream review §3.1 rule: smaller patch set never overrides missing fixes).
 2. Workstation + emulator behavior is equal on the measured surfaces; the one differentiator observed (extension-host terminal stall) affects both.
 3. code-server's additional patches are known and bounded (webview origin, secret storage, product overrides); they become explicit S02.03/U03 review items rather than unknowns.
+4. Offline notebook viability is already solved on code-server: with `vscode-cdn.net` unresolvable on the host, notebook renderer resources were served by its webview service worker and the notebook rendered correctly, while the pristine control failed on the same fixture (`docs/evidence/2026-10-16-U03-notebook-lane.md`). A self-contained Googlebook needs exactly this; a stock build would require writing the same patch ourselves.
 
 **Fallback trigger:** switch to OpenVSCode only via a new ADR if code-server shows a blocker it cannot resolve with a maintainable patch (e.g., webview origin model incompatible with the native-bridge isolation requirement, or unmaintainable upgrade cost measured in U03).
 
