@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cloudy Code</string>
+    <string name="startup_subtitle">Linux workspace for Googlebook</string>
+    <string name="startup_checking">Checking the Linux environment…</string>
+    <string name="startup_starting_vm">Starting the Linux environment…</string>
+    <string name="startup_setup_title">One-time terminal setup</string>
+    <string name="startup_copy_command">Copy setup command</string>
+    <string name="startup_open_terminal">Open Terminal</string>
+    <string name="startup_retry">Retry</string>
+    <string name="startup_offline">Continue without Linux (offline workbench)</string>
+    <string name="startup_advanced">Advanced setup (pair with an existing daemon)</string>
+</resources>

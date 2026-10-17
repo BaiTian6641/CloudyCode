@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Cloudy Workspace — design specimen</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="preview.css">
+  <script src="preview.js" defer></script>
+</head>
+<body>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-console" viewBox="0 0 24 24"><path d="m5 7 5 5-5 5m8 0h6"/></symbol>
+    <symbol id="i-desktop" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5h7l2 3h9v12H3Z"/></symbol>
+    <symbol id="i-host" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="7" rx="1"/><rect x="4" y="14" width="16" height="7" rx="1"/><path d="M7 6.5h.01M7 17.5h.01m4-11h6m-6 11h6"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="i-usb" viewBox="0 0 24 24"><path d="M12 21V4m-3 3 3-3 3 3M12 15l-6-4V8m6 10 6-5V9"/><circle cx="6" cy="6" r="2"/><rect x="16" y="5" width="4" height="4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8Zm0 0v5h5M8 12h8m-8 4h6"/></symbol>
+    <symbol id="i-tunnel" viewBox="0 0 24 24"><path d="M3 8h13l-3-3m3 3-3 3m8 5H8l3-3m-3 3 3 3"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></symbol>
+  </svg>
+
+  <div class="study-bar">
+    <div class="study-identity"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><div><strong>Cloudy Workspace</strong><p>Carbon precision. Material calm.</p></div></div>
+    <div class="study-controls" aria-label="Design specimen controls">
+      <label>Density<select id="density" aria-describedby="density-help"><option value="comfortable">Comfortable</option><option value="standard">Standard pointer</option><option value="compact">Compact pointer</option></select></label>
+      <label>Connection<select id="connection"><option value="connected">Connected</option><option value="reconnecting">Reconnecting</option><option value="offline">Offline</option></select></label>
+      <button class="button secondary" id="theme-toggle" type="button"><svg class="icon" aria-hidden="true"><use href="#i-sun"/></svg><span id="theme-label">Dark appearance</span></button>
+    </div>
+  </div>
+
+  <main class="specimen">
+    <div class="specimen-heading"><span class="eyebrow">INTERFACE STUDY / 01</span><p>Interactive design reference · all sessions, devices, and telemetry are synthetic.</p></div>
+    <p class="density-help" id="density-help">Density changes nominal row and control spacing, not text size. Rows grow with their content. Pointer tiers are illustrative; native input and target behavior require separate qualification.</p>
+    <section class="app-window" aria-label="Cloudy app design specimen" data-app="console" data-density="comfortable" id="app-window">
+      <header class="app-toolbar">
+        <button class="icon-button navigation-toggle" id="navigation-toggle" type="button" aria-label="Show navigation" aria-expanded="false" aria-controls="navigation"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+        <div class="app-switch" role="group" aria-label="Application">
+          <button class="app-choice selected" id="console-choice" type="button" aria-pressed="true" data-app-choice="console"><svg class="icon" aria-hidden="true"><use href="#i-console"/></svg>Console</button>
+          <button class="app-choice" id="desktop-choice" type="button" aria-pressed="false" data-app-choice="desktop"><svg class="icon" aria-hidden="true"><use href="#i-desktop"/></svg>Desktop</button>
+        </div>
+        <button class="command-trigger" id="command-trigger" type="button" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span>Find a workspace or action</span><kbd>Ctrl ⇧ P</kbd></button>
+        <div class="toolbar-end"><span class="local-label">Personal workspace</span><span class="avatar" aria-label="Personal profile">BT</span></div>
+      </header>
+
+      <div class="workspace" id="workspace" data-inspector="true">
+        <aside class="navigation" id="navigation" aria-label="Workspace navigation">
+          <div class="navigation-caption">WORKSPACE</div>
+          <button class="nav-item current" data-destination="overview" type="button"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><span>Workspaces</span><span class="item-count">3</span></button>
+          <button class="nav-item" data-destination="hosts" type="button"><svg class="icon" aria-hidden="true"><use href="#i-host"/></svg><span>Hosts</span><span class="item-count">4</span></button>
+          <div class="desktop-navigation" id="desktop-navigation" hidden>
+            <button class="nav-item" data-destination="files" type="button"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg><span>Files</span></button>
+            <button class="nav-item" data-destination="devices" type="button"><svg class="icon" aria-hidden="true"><use href="#i-usb"/></svg><span>Devices</span><span class="item-count">1</span></button>
+            <button class="nav-item" data-destination="activity" type="button"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg><span>Activity</span></button>
+          </div>
+          <div class="navigation-caption section-gap">PINNED WORKSPACES</div>
+          <button class="workspace-item active" data-workspace="fpga" type="button" aria-pressed="true"><span class="workspace-monogram">F</span><span><strong>FPGA controller</strong><small>MS-02Ultra · Linux</small></span></button>
+          <button class="workspace-item" data-workspace="studio" type="button" aria-pressed="false"><span class="workspace-monogram neutral">S</span><span><strong>Studio tools</strong><small>Mac Studio · macOS</small></span></button>
+          <button class="workspace-item" data-workspace="lab" type="button" aria-pressed="false"><span class="workspace-monogram neutral">L</span><span><strong>Lab notebooks</strong><small>ZBook · demo environment</small></span></button>
+          <div class="navigation-bottom"><span class="quiet-label"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>Independent apps.<br>One familiar workspace.</span><a href="README.md">Read the design handbook <span aria-hidden="true">↗</span></a></div>
+        </aside>
+
+        <div class="work-area">
+          <div class="context-header"><div><p class="breadcrumb" id="context-breadcrumb">Workspaces <span>/</span> MS-02Ultra <span>/</span> Linux</p><h1 id="workspace-title">FPGA controller</h1><p class="workspace-description" id="workspace-description">Build, inspect, and stay in flow.</p></div><div class="context-actions"><button class="icon-button" id="inspector-toggle" type="button" aria-label="Hide details" aria-expanded="true" aria-controls="inspector"><svg class="icon" aria-hidden="true"><use href="#i-panel"/></svg></button><button class="button primary" id="main-action" type="button"><svg class="icon" aria-hidden="true"><use href="#i-add"/></svg><span>New session</span></button></div></div>
+          <div class="connection-banner" id="connection-banner" role="status" hidden></div>
+
+          <section class="console-view" id="console-view" aria-label="Console workspace">
+            <div class="session-tabs" role="tablist" aria-label="Session context" id="session-tabs">
+              <button class="session-tab active" id="tab-build" type="button" role="tab" aria-selected="true" aria-controls="terminal-workspace" data-session="build"><span class="tiny-dot"></span>Build &amp; review<span class="tab-count">2 panes</span></button>
+              <button class="session-tab" id="tab-shell" type="button" role="tab" aria-selected="false" aria-controls="terminal-workspace" tabindex="-1" data-session="shell">Shell</button>
+            </div>
+            <div class="narrow-pane-switch" id="narrow-pane-switch" role="group" aria-label="Visible terminal pane"><button class="selected" type="button" data-narrow-pane="build" aria-pressed="true">Build pane</button><button type="button" data-narrow-pane="review" aria-pressed="false">Review pane</button></div>
+            <div class="terminal-workspace" id="terminal-workspace" role="tabpanel" aria-labelledby="tab-build" data-focused-pane="build">
+              <section class="terminal-pane primary-pane" aria-label="Illustrative build terminal"><div class="pane-label"><span><span class="tiny-dot"></span>linux-dev / controller</span><span>tmux · build</span></div><div class="terminal-content" tabindex="0" aria-label="Synthetic terminal output; no live input">
+<pre><span class="term-muted">~/projects/controller</span> <span class="term-cyan">main</span>
+
+<span class="term-green">dev@ms02</span> <span class="term-muted">›</span> make verify
+<span class="term-muted">[1/4]</span> Generate register map
+<span class="term-muted">[2/4]</span> Compile controller RTL
+<span class="term-muted">[3/4]</span> Run simulation suite
+<span class="term-green">  ✓</span> fifo_backpressure
+<span class="term-green">  ✓</span> clock_domain_crossing
+<span class="term-green">  ✓</span> reset_recovery
+<span class="term-muted">[4/4]</span> Export waveform
+
+<span class="term-green">24 checks passed.</span> <span class="term-muted">0 failed.</span>
+<span class="term-muted">Artifact</span>  build/trace.vcd
+
+<span class="term-green">dev@ms02</span> <span class="term-muted">›</span> <span class="terminal-cursor"> </span></pre>
+                <span class="terminal-demo-label">Illustrative terminal output</span>
+              </div></section>
+              <section class="terminal-pane review-pane" aria-label="Illustrative review terminal"><div class="pane-label"><span>linux-dev / review</span><span>tmux · review</span></div><div class="terminal-content" tabindex="0" aria-label="Synthetic review output; no live input"><pre><span class="term-cyan">Review session</span>
+<span class="term-muted">controller · reset handling</span>
+
+Changes ready for inspection:
+
+<span class="term-green"> +</span> Synchronize reset deassertion
+<span class="term-green"> +</span> Add overflow assertion
+<span class="term-yellow"> ~</span> Update timing constraints
+
+<span class="term-muted">src/rtl/reset_sync.sv</span>
+<span class="term-muted">tests/reset_recovery.sv</span>
+
+<span class="term-magenta">Next</span>
+Inspect the waveform before
+programming the target.
+
+<span class="term-muted">Session is durable on host.</span>
+<span class="term-muted">No command will be replayed.</span></pre><span class="terminal-demo-label">Generic CLI workflow</span></div></section>
+            </div>
+            <div class="console-utility"><span><svg class="icon" aria-hidden="true"><use href="#i-tunnel"/></svg>Preview <code>localhost:3000</code><span class="small-status">Demo forward</span></span><button class="text-button" id="open-desktop" type="button">Open in Desktop<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
+          </section>
+
+          <section class="desktop-view" id="desktop-view" aria-label="Desktop workspace" hidden>
+            <div class="desktop-subnav" role="group" aria-label="Workspace content"><button type="button" class="view-button selected" data-desktop-view="overview" aria-pressed="true">Overview</button><button type="button" class="view-button" data-desktop-view="files" aria-pressed="false">Files</button><button type="button" class="view-button" data-desktop-view="devices" aria-pressed="false">Devices</button><button type="button" class="view-button" data-desktop-view="activity" aria-pressed="false">Activity</button></div>
+            <div id="desktop-overview" class="desktop-content">
+              <div class="scene-heading"><span><svg class="icon" aria-hidden="true"><use href="#i-desktop"/></svg>Host desktop</span><span class="muted">Monitor 1 · illustrative scene</span></div>
+              <div class="remote-scene"><div class="scene-appbar"><span>Controller / signal path</span><span>Design review</span></div>
+                <svg class="circuit-scene" viewBox="0 0 680 300" role="img" aria-label="Illustrative signal-path diagram with ADC, FPGA controller, and waveform output; not a live host stream">
+                  <defs><pattern id="circuit-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" class="grid-dot"/></pattern></defs>
+                  <rect width="680" height="300" fill="url(#circuit-grid)"/>
+                  <path d="M145 118h110m170 0h110M145 185h62v-35h48m170 0h65v35h45" class="circuit-wire"/>
+                  <rect x="45" y="88" width="100" height="60" rx="8" class="circuit-node"/><text x="95" y="124" text-anchor="middle">ADC</text>
+                  <rect x="45" y="165" width="100" height="42" rx="8" class="circuit-node"/><text x="95" y="192" text-anchor="middle">Trigger</text>
+                  <rect x="255" y="66" width="170" height="130" rx="12" class="circuit-chip"/><text x="340" y="119" text-anchor="middle" class="chip-title">FPGA</text><text x="340" y="146" text-anchor="middle">Controller</text><text x="340" y="171" text-anchor="middle" class="chip-caption">reset synchronized</text>
+                  <rect x="535" y="88" width="100" height="60" rx="8" class="circuit-node"/><text x="585" y="124" text-anchor="middle">DMA</text>
+                  <rect x="535" y="165" width="100" height="42" rx="8" class="circuit-node"/><text x="585" y="192" text-anchor="middle">Status</text>
+                  <path d="M65 255h40v-25h35v25h40v-25h35v25h40v-25h35v25h40v-25h35v25h40v-25h35v25h40v-25h35v25h40" class="waveform"/>
+                </svg>
+                <div class="scene-footer"><span>Illustrative host scene · no live stream</span><span>Inspect before programming</span></div>
+              </div>
+              <div class="desktop-summary"><div><span class="eyebrow">VISUAL WORK, WHEN YOU NEED IT</span><h2>A desktop beside your console.</h2><p>Keep the same host and project context when you move from code to inspection.</p></div><button class="button secondary" id="desktop-demo" type="button">Preview connection state<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
+              <div class="resource-row"><div><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg><span><strong>trace.vcd</strong><small>Project artifact · 2.4 MB · demo</small></span></div><button class="text-button" data-show-files type="button">View files <span aria-hidden="true">→</span></button></div>
+            </div>
+            <div id="desktop-files" class="desktop-content" hidden><div class="list-heading"><div><h2>Project files</h2><p class="metadata">Host SFTP <span aria-hidden="true">/</span> <code>~/projects/controller</code></p></div><span class="badge neutral-badge">Synthetic data</span></div><div class="table-scroll"><table class="file-table"><thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Size</th><th scope="col">State</th></tr></thead><tbody><tr><td><button class="file-button" data-file="trace.vcd" type="button">trace.vcd</button></td><td>Waveform</td><td>2.4 MB</td><td><span class="badge success-badge">Committed</span></td></tr><tr><td><button class="file-button" data-file="reset_sync.sv" type="button">reset_sync.sv</button></td><td>Source</td><td>4.1 KB</td><td>Host-local</td></tr><tr><td><button class="file-button" data-file="review.md" type="button">review.md</button></td><td>Document</td><td>8.6 KB</td><td><span class="badge warning-badge">Conflict copy</span></td></tr><tr><td><button class="file-button" data-file="controller.bit" type="button">controller.bit</button></td><td>Bitstream</td><td>32 MB</td><td>Host-local</td></tr></tbody></table></div><div class="inline-note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><p>Remote commit and local cache are separate states. A competing edit is preserved as a conflict copy.</p></div></div>
+            <div id="desktop-devices" class="desktop-content" hidden><div class="list-heading"><div><h2>Devices</h2><p>One provider. One confirmed consumer.</p></div><span class="badge neutral-badge">Synthetic device</span></div><div class="device-detail"><div class="device-title"><svg class="icon large-icon" aria-hidden="true"><use href="#i-usb"/></svg><div><h3>Development probe</h3><p>Googlebook USB provider → <span id="device-owner">MS-02Ultra</span></p></div><span class="badge success-badge" id="device-badge">In use · demo</span></div><dl><div><dt>Owner state</dt><dd id="owner-state">Confirmed in this design scenario</dd></div><div><dt>Reset identity</dt><dd>Approved application + bootloader set</dd></div><div><dt>Programming protection</dt><dd><label class="switch-label"><input type="checkbox" id="protected-operation">Protected operation</label></dd></div></dl><button class="button secondary" id="release-device" type="button">Release demo device</button><p class="device-help" id="device-help">This changes the illustration only. No device is connected.</p></div></div>
+            <div id="desktop-activity" class="desktop-content" hidden><div class="list-heading"><div><h2>Activity</h2><p>Events keep their host, source, and time.</p></div><span class="badge neutral-badge">Synthetic history</span></div><ol class="activity-list"><li><span class="event-mark success-mark" aria-hidden="true">✓</span><div><strong>Verification completed</strong><p>MS-02Ultra · controller · build job</p><small>Illustrative event · 24 checks passed</small></div></li><li><span class="event-mark" aria-hidden="true">↗</span><div><strong>Waveform committed</strong><p>MS-02Ultra · trace.vcd</p><small>Illustrative transfer · 2.4 MB</small></div></li><li><span class="event-mark warning-mark" aria-hidden="true">!</span><div><strong>Conflicting edit preserved</strong><p>MS-02Ultra · review.md</p><small>Both versions remain available</small></div></li><li class="history-gap"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span>History gap example · older events unavailable</span></li></ol></div>
+          </section>
+
+          <section id="hosts-view" class="hosts-view" aria-label="Host profiles" hidden><div class="list-heading"><div><h2>Your hosts</h2><p>Installed environments are examples, not an inventory.</p></div></div><div class="table-scroll"><table class="file-table"><thead><tr><th scope="col">Host</th><th scope="col">Environment</th><th scope="col">Qualification</th></tr></thead><tbody><tr><td>MS-02Ultra</td><td>Linux · demo</td><td>Unqualified</td></tr><tr><td>Mac Studio</td><td>macOS · demo</td><td>Unqualified</td></tr><tr><td>Zenbook Duo</td><td>Not recorded</td><td>Unqualified</td></tr><tr><td>ZBook Ultra</td><td>Not recorded</td><td>Unqualified</td></tr></tbody></table></div></section>
+        </div>
+
+        <aside class="inspector" id="inspector" aria-label="Workspace details"><div class="inspector-header"><span>Workspace details</span><button class="icon-button" id="inspector-close" type="button" aria-label="Close details"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="inspector-section"><span class="eyebrow">ACTIVE ENVIRONMENT</span><h2 id="inspector-host">MS-02Ultra</h2><p class="metadata" id="inspector-environment">Linux development · demo</p><dl><div><dt>Connection</dt><dd><span class="badge success-badge" id="connection-badge">Connected · demo</span></dd></div><div><dt>Session</dt><dd id="persistence-label">Durable · tmux</dd></div><div><dt>Project root</dt><dd><code id="project-root">~/projects/controller</code></dd></div></dl></div><div class="inspector-section"><div class="section-label"><span class="eyebrow">SESSION CONTEXT</span><svg class="icon" aria-hidden="true"><use href="#i-console"/></svg></div><div class="detail-item"><span class="tiny-dot"></span><div><strong>Build &amp; review</strong><small>2 panes · host process persists</small></div></div><div class="detail-item"><svg class="icon" aria-hidden="true"><use href="#i-tunnel"/></svg><div><strong>Development preview</strong><small>127.0.0.1:3000 · demo</small></div></div></div><div class="inspector-section" id="selected-file-section" hidden><span class="eyebrow">SELECTED FILE</span><h3 id="selected-file-name">trace.vcd</h3><p>Host-local resource. Remote commit, cached copy, and provider sync remain distinct.</p></div><div class="inspector-section"><span class="eyebrow">DESIGN LANGUAGE</span><div class="palette-swatches" aria-label="Neutral, teal, and indigo palette"><span class="swatch swatch-neutral"></span><span class="swatch swatch-primary"></span><span class="swatch swatch-accent"></span><span class="swatch swatch-container"></span></div><p>Productive structure.<br>Tonal hierarchy.<br>Room for the work.</p></div><div class="inspector-footnote">Reference states only.<br>No network or host access.</div></aside>
+      </div>
+      <footer class="status-strip"><span><span class="tiny-dot" id="status-dot"></span><span id="status-connection">Connected to MS-02Ultra · demo</span></span><span class="status-secondary" id="status-measurement">Illustrative: 14 ms RTT · 4.2 MB payload</span><span class="status-tail">Cloudy / mineral</span></footer>
+    </section>
+    <div class="study-notes"><p><strong>Structure from Carbon.</strong> Aligned data, productive type, quiet chrome.</p><p><strong>Clarity from Material 3.</strong> Tonal surfaces, semantic pairs, adaptive panes.</p><p><strong>Cloudy's own balance.</strong> Mineral neutrals, teal actions, indigo focus.</p></div>
+  </main>
+
+  <dialog id="palette-dialog" class="palette-dialog" aria-labelledby="palette-title"><div class="palette-titlebar"><h2 id="palette-title">Find an action</h2><button class="icon-button" id="palette-close" type="button" aria-label="Close command palette"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div><label class="palette-input-label" for="palette-input">Search Cloudy actions</label><input id="palette-input" type="search" placeholder="Workspace, appearance, session…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="palette-results"><div id="palette-results" role="listbox" aria-label="Actions"></div><p class="palette-hint">↑ ↓ to navigate · Enter to choose · Esc to close</p></dialog>
+  <div class="announcement" id="announcement" role="status" aria-live="polite"></div>
+</body>
+</html>

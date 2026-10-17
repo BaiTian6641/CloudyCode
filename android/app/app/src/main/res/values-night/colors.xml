@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cloudy design tokens (dark). -->
+    <color name="cw_canvas">#101A1D</color>
+    <color name="cw_surface">#17262B</color>
+    <color name="cw_surface_muted">#1C3036</color>
+    <color name="cw_surface_raised">#263E45</color>
+    <color name="cw_text_primary">#E1EBED</color>
+    <color name="cw_text_secondary">#AEC3C9</color>
+    <color name="cw_primary">#7DD5C7</color>
+    <color name="cw_primary_hover">#A4E8DC</color>
+    <color name="cw_on_primary">#003A34</color>
+    <color name="cw_primary_container">#164C43</color>
+    <color name="cw_on_primary_container">#B1F2DE</color>
+    <color name="cw_accent">#B6C5FF</color>
+    <color name="cw_outline">#79959E</color>
+    <color name="cw_divider">#35515A</color>
+    <color name="cw_focus">#BAC8FF</color>
+    <color name="cw_success">#93D7AE</color>
+    <color name="cw_warning">#F5C36B</color>
+    <color name="cw_danger">#FFB4AC</color>
+    <color name="cw_terminal_background">#0C1519</color>
+    <color name="cw_terminal_text">#DCE9ED</color>
+    <color name="cw_scrim">#33000000</color>
+</resources>

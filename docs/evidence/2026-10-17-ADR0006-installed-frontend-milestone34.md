@@ -104,6 +104,23 @@ Verified with a real code-server 4.141.0 on the workstation, exposed into the de
 
 Security note: the interim code-server lane uses `--auth none` on a forwarded loopback port (dev lane). Production keeps the authenticated reh-web/pairing path.
 
+## Cloudy Code shell redesign and first real-VM success (2026-10-17)
+
+Product name: **Cloudy Code** (display name, window caption, in-app titles). The application id remains `dev.gbcode.app`; repository/plan documents still use the internal GBCode name.
+
+Shell redesign per `docs/04-design` (Carbon structure + M3 tonal clarity):
+
+| Item | Change |
+|---|---|
+| Title bar | Removed the app's own title bar (`Theme.Cloudy`, `NoActionBar`). Only the Android system caption remains — the design forbids recreating system window controls. |
+| Tokens | Light/dark `cw_*` colors from `tokens.css` (canvas `#F4F7F7`, teal primary `#006A6A`, terminal `#101C22`, etc.), text styles 24/20/14/12 sp with `sans-serif-medium`/`monospace`, radii: buttons 8, cards/code 12, fields 6, spacing 4-unit rhythm. |
+| Startup | Calm status column with product title, metadata, one status line, thin indeterminate progress, one filled teal action ("Copy setup command"), outline ("Open Terminal"), text actions ("Retry", offline, advanced). Code block in terminal surface. |
+| Advanced setup | Same system: labels above bordered fields, filled primary pair action, outline reconnect, text link for offline, activity log block. |
+| Icon | Adaptive icon: teal cloud + `</>` on the primary-container background, with a monochrome layer; legacy edit icon removed. |
+| Width | Content measure capped at 560 dp on wide desktop windows. |
+
+**First real-VM end-to-end success**: on the HP Googlebook 14 the Terminal app forwards the Linux VM's port; with the user's code-server 4.141.0 running in the VM (installed by the setup command), `127.0.0.1:8080` appeared on Android and the app connected automatically with no further steps. The workbench rendered the real VM code-server (Explorer, Welcome, status bar); the window caption shows "Cloudy Code" and the new icon. Evidence: `cloudy-startup.png`, `cloudy-advanced-setup.png`, `cloudy-workbench-real-vm.png`.
+
 ## Tests
 
 `tools/verify.sh` → ALL GREEN. sessiond 27/27; gateway 5/5; instrumented 47/47 (emulator only), including `WebAssetGatewayTest` with the renderer's new parameters.

@@ -34,72 +34,31 @@ class OnboardingActivity : Activity() {
         super.onCreate(savedInstanceState)
         val app = application as GbCodeApp
 
-        val title = TextView(this)
-        title.text = "GBCode — connect to the Googlebook Debian environment"
-        title.textSize = 18f
-        title.setPadding(24, 24, 24, 8)
+        setContentView(dev.gbcode.app.R.layout.activity_onboarding)
 
-        val instructions = TextView(this)
-        instructions.text = "In the Terminal app, run the GBCode bootstrap, then start the daemon " +
-                "with --enroll. Paste the printed daemon address and one-time pairing secret, and " +
-                "the workbench backend URL. Compare the server fingerprint before continuing."
-        instructions.setPadding(24, 0, 24, 16)
+        daemonField = findViewById(dev.gbcode.app.R.id.daemonField)
+        workbenchField = findViewById(dev.gbcode.app.R.id.workbenchField)
+        secretField = findViewById(dev.gbcode.app.R.id.secretField)
+        passwordField = findViewById(dev.gbcode.app.R.id.passwordField)
+        logView = findViewById(dev.gbcode.app.R.id.logView)
 
-        daemonField = EditText(this)
-        daemonField.setSingleLine(true)
-        daemonField.hint = "daemon address (http://127.0.0.1:9123)"
-        workbenchField = EditText(this)
-        workbenchField.setSingleLine(true)
-        workbenchField.hint = "workbench URL (http://127.0.0.1:8080)"
-        secretField = EditText(this)
-        secretField.setSingleLine(true)
-        secretField.inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        secretField.hint = "one-time pairing secret"
-        passwordField = EditText(this)
-        passwordField.setSingleLine(true)
-        passwordField.inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        passwordField.hint = "backend password (optional; stored locally, never in page JS)"
-
-
-        val pairButton = Button(this)
-        pairButton.text = "Pair and connect"
-        pairButton.setOnClickListener { startPairing(app) }
-
-        val reconnectButton = Button(this)
-        reconnectButton.text = "Reconnect saved identity"
+        findViewById<Button>(dev.gbcode.app.R.id.pairButton)
+            .setOnClickListener { startPairing(app) }
+        val reconnectButton = findViewById<Button>(dev.gbcode.app.R.id.reconnectButton)
         reconnectButton.isEnabled = app.loadPairedState() != null
         reconnectButton.setOnClickListener { authenticateRestored(app) }
-
-        // ADR-0006: the workbench is app-owned and starts from packaged assets
-        // with no guest and no network. Pairing only adds guest IDE services.
-        val offlineButton = Button(this)
-        offlineButton.text = "Open workbench (offline, no guest)"
-        offlineButton.setOnClickListener {
+        findViewById<Button>(dev.gbcode.app.R.id.offlineButton).setOnClickListener {
             startActivity(Intent(this, WorkbenchActivity::class.java))
         }
 
-        logView = TextView(this)
-        logView.setPadding(24, 16, 24, 16)
-        val scroll = ScrollView(this)
-        scroll.addView(logView)
-
-        val root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
-        root.addView(title)
-        root.addView(instructions)
-        root.addView(daemonField)
-        root.addView(workbenchField)
-        root.addView(secretField)
-        root.addView(passwordField)
-        root.addView(pairButton)
-        root.addView(reconnectButton)
-        root.addView(offlineButton)
-        root.addView(scroll, LinearLayout.LayoutParams(
-
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        setContentView(root)
+        // Productive column: cap the text measure on wide windows.
+        val content = findViewById<LinearLayout>(dev.gbcode.app.R.id.content)
+        content.post {
+            val maxContent = (560 * resources.displayMetrics.density).toInt()
+            val pad = maxOf((48 * resources.displayMetrics.density).toInt(),
+                (content.width - maxContent) / 2)
+            content.setPadding(pad, content.paddingTop, pad, content.paddingBottom)
+        }
 
         // Debug-lane deep-fill: pairing parameters via intent extras (debug
         // builds only). The release UX is explicit user entry; a checked QR

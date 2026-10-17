@@ -6,48 +6,45 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import dev.gbcode.app.GbCodeApp
+import dev.gbcode.app.R
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.max
 
 /**
- * Launch flow (the product path):
+ * Launch screen (Cloudy design): calm status first, one filled teal action.
  *
- * 1. The user opens the app.
- * 2. If the guest backend is not running, the app shows the one-time setup:
- *    the Terminal command endpoint is protected by the platform
- *    signature|preinstalled permission MANAGE_TERMINAL, so a sideloaded APK
- *    cannot run the command itself. The page offers the exact setup command
- *    and opens the Terminal; it keeps checking the forwarded ports.
- * 3. As soon as the backend (code-server on 8080, or the pinned reh-web on
- *    8085) is reachable, the workbench opens connected.
- * 4. The user works normally. A preinstalled/partner build holds the
- *    permission and can run the Terminal command intent itself.
+ * 1. Probe the forwarded backend ports off the main thread.
+ * 2. If a backend is up: open the workbench connected.
+ * 3. Otherwise: one-time terminal setup card (copy the command, open the
+ *    Terminal) while checking continues; the screen advances by itself as
+ *    soon as the server appears.
+ * 4. The privileged Terminal command intent is used only when the build holds
+ *    MANAGE_TERMINAL (preinstalled/partner build).
  */
 class StartupActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var detail: TextView
-    private lateinit var retry: Button
-    private lateinit var copySetup: Button
-    private lateinit var openTerminal: Button
+    private lateinit var progress: View
+    private lateinit var setupCard: View
     private lateinit var offline: Button
     private lateinit var advanced: Button
 
     private val handler = Handler(Looper.getMainLooper())
     private val probe = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "gbcode-startup-probe").apply { isDaemon = true }
+        Thread(r, "cloudy-startup-probe").apply { isDaemon = true }
     }
     private val pollBoth = AtomicBoolean(false)
     private var probeMode = false
@@ -59,100 +56,72 @@ class StartupActivity : Activity() {
         probeMode = intent.getBooleanExtra("probe", false)
         forceIntent = intent.getBooleanExtra("force_intent", false)
         if (probeMode) targetPort = PROBE_PORT
-        buildUi()
+        setContentView(R.layout.activity_startup)
+
+        statusText = findViewById(R.id.statusText)
+        detail = findViewById(R.id.detail)
+        progress = findViewById(R.id.progress)
+        setupCard = findViewById(R.id.setupCard)
+        offline = findViewById(R.id.offline)
+        advanced = findViewById(R.id.advanced)
+
+        findViewById<TextView>(R.id.commandBlock).text = SETUP_COMMAND
+        findViewById<Button>(R.id.copySetup).setOnClickListener {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Cloudy Code setup", SETUP_COMMAND))
+            detail.text = "Command copied. Paste it in the Terminal; this screen continues " +
+                "by itself when the server is available."
+        }
+        findViewById<Button>(R.id.openTerminal).setOnClickListener { openTerminalApp() }
+        findViewById<Button>(R.id.retry).setOnClickListener {
+            pollBoth.set(false)
+            handler.removeCallbacks(setupPoll)
+            begin()
+        }
+        offline.setOnClickListener {
+            startActivity(Intent(this, WorkbenchActivity::class.java))
+            finish()
+        }
+        advanced.setOnClickListener {
+            startActivity(Intent(this, OnboardingActivity::class.java))
+            finish()
+        }
+
+        // Productive column: prose stays within a readable measure on wide
+        // Googlebook windows instead of stretching edge to edge.
+        val content = findViewById<LinearLayout>(R.id.content)
+        content.post {
+            val maxContent = dp(560)
+            val pad = max(dp(48), (content.width - maxContent) / 2)
+            content.setPadding(pad, dp(40), pad, dp(40))
+        }
+        showSetup(false)
         begin()
     }
 
-    private fun buildUi() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(48, 64, 48, 48)
-        }
-        val title = TextView(this).apply {
-            text = "GBCode"
-            textSize = 26f
-            setTextColor(Color.parseColor("#e0e0e0"))
-        }
-        statusText = TextView(this).apply {
-            text = "Preparing the Linux environment…"
-            textSize = 17f
-            setTextColor(Color.parseColor("#c0c0c0"))
-            setPadding(0, 24, 0, 8)
-        }
-        detail = TextView(this).apply {
-            textSize = 13f
-            setTextColor(Color.parseColor("#909090"))
-        }
-        retry = Button(this).apply {
-            text = "Retry"
-            setOnClickListener {
-                pollBoth.set(false)
-                handler.removeCallbacks(setupPoll)
-                begin()
-            }
-        }
-        copySetup = Button(this).apply {
-            text = "Copy setup command"
-            setOnClickListener {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("GBCode setup", SETUP_COMMAND))
-                setDetail("Command copied. Paste it in the Terminal; this screen continues " +
-                    "by itself when the server is available.")
-            }
-        }
-        openTerminal = Button(this).apply {
-            text = "Open Terminal (one-time backend setup)"
-            setOnClickListener { openTerminalApp() }
-        }
-        offline = Button(this).apply {
-            text = "Continue without Linux (offline workbench)"
-            setOnClickListener {
-                startActivity(Intent(this@StartupActivity, WorkbenchActivity::class.java))
-                finish()
-            }
-        }
-        advanced = Button(this).apply {
-            text = "Advanced setup (pair with an existing daemon)"
-            setOnClickListener {
-                startActivity(Intent(this@StartupActivity, OnboardingActivity::class.java))
-                finish()
-            }
-        }
-        root.addView(title)
-        root.addView(statusText)
-        root.addView(detail)
-        val scroll = ScrollView(this).apply { addView(root) }
-        root.addView(retry)
-        root.addView(copySetup)
-        root.addView(openTerminal)
-        root.addView(offline)
-        root.addView(advanced)
-        setContentView(scroll)
-        setButtonsVisible(false)
-    }
-
     private fun begin() {
-        setButtonsVisible(false)
+        showSetup(false)
+        progress.visibility = View.VISIBLE
+        statusText.setText(R.string.startup_checking)
         val app = application as GbCodeApp
         val token = app.connectionToken()
-        setStatus("Checking the Linux environment…")
         if (probeMode) {
             probe.execute {
                 val up = portOpen(targetPort)
                 runOnUiThread {
                     if (up) {
-                        setStatus("Probe server is reachable on 127.0.0.1:$PROBE_PORT")
-                        setDetail("Terminal command intent executed in the VM and the guest " +
-                            "port is forwarded to the app.")
+                        progress.visibility = View.GONE
+                        statusText.text = "Probe server is reachable on 127.0.0.1:$PROBE_PORT"
+                        detail.text = "Terminal command intent executed in the VM and the " +
+                            "guest port is forwarded to the app."
                     } else if (hasManageTerminal() || forceIntent) {
-                        launchTerminalCommand(
-                            "python3 -m http.server $PROBE_PORT --bind 0.0.0.0")
+                        launchTerminalCommand("python3 -m http.server $PROBE_PORT --bind 0.0.0.0")
                         awaitPort()
                     } else {
-                        setStatus("Probe requires the preinstalled Terminal permission.")
-                        setDetail("MANAGE_TERMINAL is signature|preinstalled; sideloaded " +
-                            "apps are denied (verified on this device).")
-                        setButtonsVisible(true)
+                        showSetup(true)
+                        statusText.text = "Probe requires the preinstalled Terminal permission."
+                        detail.text = "MANAGE_TERMINAL is signature|preinstalled; sideloaded " +
+                            "apps are denied (verified on this device)."
                     }
                 }
             }
@@ -164,11 +133,11 @@ class StartupActivity : Activity() {
             runOnUiThread {
                 when {
                     rehUp -> {
-                        setStatus("Backend is running; connecting…")
+                        statusText.text = "Backend is running; connecting…"
                         connect(app, token)
                     }
                     csUp -> {
-                        setStatus("code-server is running; connecting…")
+                        statusText.text = "code-server is running; connecting…"
                         connectCodeServer(app)
                     }
                     else -> setupState()
@@ -178,21 +147,19 @@ class StartupActivity : Activity() {
     }
 
     private fun setupState() {
-        // The privileged command path is only usable by a preinstalled build.
         if (hasManageTerminal() || forceIntent) {
             launchTerminalCommand(
-                "\$HOME/.local/bin/gbcode-start-backend --token " +
+                "\$HOME/.local/bin/cloudy-start-backend --token " +
                     "${(application as GbCodeApp).connectionToken()} --port $BACKEND_PORT")
             awaitPort()
             return
         }
-        setStatus("One-time setup: start the Linux backend")
-        setDetail(
-            "Android only lets the preinstalled Terminal API run commands in the VM " +
-                "MANAGE_TERMINAL is signature|preinstalled). Use 'Copy setup command' and " +
-                "run it once in the Terminal. This screen keeps checking and continues " +
-                "by itself as soon as the server is available.")
-        setButtonsVisible(true)
+        showSetup(true)
+        statusText.text = "One-time setup: start the Linux backend"
+        detail.text = "Android lets only the preinstalled Terminal API run commands in the VM " +
+            "(MANAGE_TERMINAL is signature|preinstalled). Copy the setup command and run it " +
+            "once in the Terminal. This screen keeps checking and continues by itself as " +
+            "soon as the server is available."
         pollBoth.set(true)
         handler.postDelayed(setupPoll, 1500)
     }
@@ -221,26 +188,25 @@ class StartupActivity : Activity() {
         val intent = Intent(Intent.ACTION_VIEW, uri)
             .putExtra("com.android.virtualization.terminal.EXTRA_GO_BACKGROUND", true)
         try {
-            // The Terminal app requires an activity started for result (it
-            // reads getCallingPackage()/getLaunchedFromUid()).
             startActivityForResult(intent, REQ_TERMINAL)
-            setStatus("Starting the Linux environment…")
-            setDetail("Approve the command in the Terminal dialog.")
+            statusText.setText(R.string.startup_starting_vm)
+            detail.text = "Approve the command in the Terminal dialog."
         } catch (e: SecurityException) {
-            setStatus("The Terminal command endpoint is privileged (MANAGE_TERMINAL).")
-            setDetail("A sideloaded APK cannot use it; use 'Copy setup command' and run " +
-                "it once in the Terminal. This screen continues when the server is up.")
-            setButtonsVisible(true)
+            showSetup(true)
+            statusText.text = "The Terminal command endpoint is privileged."
+            detail.text = "A sideloaded app cannot use it; copy the setup command and run it " +
+                "once in the Terminal. This screen continues when the server is up."
             pollBoth.set(true)
             handler.postDelayed(setupPoll, 1500)
         } catch (e: android.content.ActivityNotFoundException) {
-            setStatus("No Linux environment available on this device.")
-            setDetail("The Terminal app was not found.")
-            setButtonsVisible(true)
+            showSetup(true)
+            statusText.text = "No Linux environment available on this device."
+            detail.text = "The Terminal app was not found."
         }
     }
 
     private fun awaitPort() {
+        progress.visibility = View.VISIBLE
         pollBoth.set(true)
         handler.postDelayed(setupPoll, 700)
     }
@@ -269,21 +235,21 @@ class StartupActivity : Activity() {
     private fun openTerminalApp() {
         val launch = packageManager.getLaunchIntentForPackage("com.android.virtualization.terminal")
         if (launch == null) {
-            setDetail("The Googlebook Terminal app is not installed.")
+            detail.text = "The Googlebook Terminal app is not installed."
             return
         }
         try {
             startActivity(launch)
         } catch (e: Exception) {
-            setDetail("Could not open the Terminal app: ${e.message}")
+            detail.text = "Could not open the Terminal app: ${e.message}"
         }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_TERMINAL) {
-            Log.i("GBCodeStartup", "terminal intent result: $resultCode")
-            setDetail("Terminal accepted the command (result $resultCode); waiting for the backend…")
+            Log.i("CloudyStartup", "terminal intent result: $resultCode")
+            detail.text = "Terminal accepted the command (result $resultCode); waiting for the backend…"
         }
     }
 
@@ -292,6 +258,14 @@ class StartupActivity : Activity() {
         handler.removeCallbacks(setupPoll)
         probe.shutdownNow()
         super.onDestroy()
+    }
+
+    private fun showSetup(visible: Boolean) {
+        val v = if (visible) View.VISIBLE else View.GONE
+        setupCard.visibility = v
+        offline.visibility = v
+        advanced.visibility = v
+        if (visible) progress.visibility = View.VISIBLE
     }
 
     private fun hasManageTerminal(): Boolean =
@@ -308,24 +282,8 @@ class StartupActivity : Activity() {
         }
     }
 
-    private fun setStatus(text: String) {
-        runOnUiThread { statusText.text = text }
-    }
-
-    private fun setDetail(text: String) {
-        runOnUiThread { detail.text = text }
-    }
-
-    private fun setButtonsVisible(visible: Boolean) {
-        val v = if (visible) LinearLayout.VISIBLE else LinearLayout.GONE
-        runOnUiThread {
-            retry.visibility = v
-            copySetup.visibility = v
-            openTerminal.visibility = v
-            offline.visibility = v
-            advanced.visibility = v
-        }
-    }
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     companion object {
         private const val REQ_TERMINAL = 41
