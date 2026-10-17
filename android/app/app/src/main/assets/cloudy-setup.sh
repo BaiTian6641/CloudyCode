@@ -29,7 +29,10 @@ mkdir -p "$BASE/data" "$BASE/extensions" "$UNITS"
 if [ "$DRY" = 0 ]; then
   sudo -v
   sudo apt-get update
-  sudo apt-get install -y --no-install-recommends python3 ca-certificates curl usbip
+  sudo apt-get install -y --no-install-recommends python3 ca-certificates curl usbip || \
+    sudo apt-get install -y "linux-tools-$(uname -r)" || \
+    sudo apt-get install -y linux-tools-common || true
+  command -v usbip >/dev/null || echo "warning: usbip not installed; the auto-attach unit will not work" >&2
 fi
 
 cat > "$BASE/cloudy-serial-bridge.py" <<'PY'

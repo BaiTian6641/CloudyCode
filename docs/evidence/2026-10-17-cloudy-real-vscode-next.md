@@ -167,6 +167,15 @@ Verified on the device: guest bridges forwarded; the app's exporter auto-started
 
 Backend state observed: only code-server on 8080 is listening; the pinned reh-web backend on 8085 is not running (build/service pending).
 
+## Guest `usbip` missing: short attach patch and compressed updates (2026-10-17)
+
+The VM reported `usbip: command not found`: the running setup predates the usbip install, and Debian packaging varies. Response:
+
+1. `tools/device/cloudy-attach-patch.sh` — short, idempotent VM patch: tries `usbip`, `linux-tools-$(uname -r)`, `linux-tools-common`, `linux-tools-generic`; verifies the binary; `modprobe vhci-hcd` with a clear warning; installs `/usr/local/bin/cloudy-usbip-attach` + `cloudy-usbip-attach.service` (root) that waits for the relay to serve `cloudy-303a-1001` and attaches it; prints `usbip port` and `/dev/ttyACM*`.
+2. The USB screen copies it ("Copy USB auto-attach patch (short)"), reachable from the USB/IP notification.
+3. The full setup now also uses the same apt fallbacks/verification, and its copy is **gzip+base64 compressed**: the exact command is 8326 bytes instead of ~25 KB and was validated end-to-end (dry-run) from the generated string.
+4. Update story: setup remains idempotent; the compressed one-liner is the current update path. A push-updater over the authenticated bridge (app -> guest) is the next step if copy-free updates are wanted.
+
 ## Operating constraint
 
 The Terminal app owns the VM port bridge; closing it removes the forwarded port (the app's reconnect surface handles this and offers Open Terminal). A VM-side systemd service keeps the *server* alive but not the bridge; a preinstalled build could start the VM command itself (`MANAGE_TERMINAL`).

@@ -21,11 +21,15 @@ object GuestSetup {
             "{ systemctl --user restart cloudy-code.service 2>/dev/null || " +
             "\$HOME/.local/share/cloudy/start-backend.sh; }"
 
-    /** One command that provisions the guest once (bridges + backend service). */
-    fun setupCommand(token: String, script: String): String =
-        "cat > ~/cloudy-setup.sh <<'CLOUDY_SETUP_EOF'\n" + script +
-            "\nCLOUDY_SETUP_EOF\n" +
+    /** One command that provisions the guest once (bridges + backend service).
+     *  The script is gzipped+base64 so updates stay a short paste. */
+    fun setupCommand(token: String, script: String): String {
+        val bos = java.io.ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(bos).use { it.write(script.toByteArray(Charsets.UTF_8)) }
+        val b64 = android.util.Base64.encodeToString(bos.toByteArray(), android.util.Base64.NO_WRAP)
+        return "echo '$b64' | base64 -d | gzip -d > ~/cloudy-setup.sh && " +
             "bash ~/cloudy-setup.sh --token $token"
+    }
 
     const val COMMAND =
         "curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone " +

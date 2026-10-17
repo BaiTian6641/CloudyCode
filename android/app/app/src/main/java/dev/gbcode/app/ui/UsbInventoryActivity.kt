@@ -41,6 +41,7 @@ class UsbInventoryActivity : Activity() {
     private lateinit var stopUsbIp: Button
     private lateinit var copyUsbIp: Button
     private lateinit var copySetup: Button
+    private lateinit var copyAttach: Button
     private lateinit var bridgeStatus: TextView
     private var debugToken: String? = null
     private val token: String
@@ -142,6 +143,15 @@ class UsbInventoryActivity : Activity() {
             text = "Copy USB/IP relay command"
             setOnClickListener { copyUsbIpCommand() }
         }
+        copyAttach = Button(this).apply {
+            text = "Copy USB auto-attach patch (short)"
+            setOnClickListener {
+                val patch = assets.open("cloudy-attach-patch.sh").bufferedReader().use { it.readText() }
+                setClipboardText("Cloudy attach patch", patch)
+                status.text = "Attach patch copied. Paste it in the Terminal (sudo). It installs " +
+                    "usbip, vhci and the auto-attach unit."
+            }
+        }
         copySetup = Button(this).apply {
             text = "Copy Linux setup command (services + auto-attach)"
             setOnClickListener {
@@ -163,6 +173,7 @@ class UsbInventoryActivity : Activity() {
         root.addView(stopUsbIp)
         root.addView(copyUsbIp)
         root.addView(copySetup)
+        root.addView(copyAttach)
         root.addView(scroll, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
