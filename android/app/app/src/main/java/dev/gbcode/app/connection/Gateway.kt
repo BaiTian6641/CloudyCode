@@ -29,6 +29,9 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
         private set
 
     fun start(preferredPort: Int = 0): Int {
+        require(isLoopbackHost(upstreamHost)) {
+            "APK gateway forwards to loopback backends only (got $upstreamHost)"
+        }
         val srv = ServerSocket()
         var bound = false
         if (preferredPort in 1..65535) {
@@ -91,6 +94,30 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
             val head = headText.substring(0, headEnd + 4)
             val requestLine = head.substringBefore("\r\n")
             val headers = parseHeaders(head)
+
+            // Gateway authorization (S02.05): this proxy exists only for our own
+            // WebView origin. A loopback port is not authentication — validate
+            // method, target, Host and Origin before any upstream contact, and
+            // never forge an origin for a request that did not present ours.
+            val parts = requestLine.split(" ")
+            val method = parts.getOrNull(0) ?: ""
+            val target = parts.getOrNull(1) ?: ""
+            if (parts.size < 3 || parts[2] !in HTTP_VERSIONS ||
+                method !in ALLOWED_METHODS || !target.startsWith("/")) {
+                return reject(client, 400, "Bad Request")
+            }
+            val host = headers["host"]?.lowercase()
+                ?: return reject(client, 400, "Bad Request")
+            if (host != "127.0.0.1:$port" && host != "localhost:$port") {
+                return reject(client, 421, "Misdirected Request")
+            }
+            val gatewayOrigin = "http://127.0.0.1:$port"
+            val gatewayOriginAlt = "http://localhost:$port"
+            val origin = headers["origin"]
+            if (origin != null && origin != gatewayOrigin && origin != gatewayOriginAlt) {
+                return reject(client, 403, "Forbidden")
+            }
+
             android.util.Log.i(TAG, "request: $requestLine")
 
             upstream = Socket()
@@ -101,14 +128,21 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
             val isUpgrade = headers["connection"]?.contains("upgrade", true) == true &&
                     headers.containsKey("sec-websocket-key")
             val clientWantsClose = headers["connection"]?.contains("close", true) == true
+            val upstreamOrigin = "http://$upstreamHost:$upstreamPort"
             val rewritten = StringBuilder()
             rewritten.append(requestLine).append("\r\n")
             for ((key, value) in headers) {
                 val lk = key.lowercase()
                 val v = when (lk) {
                     "host" -> "$upstreamHost:$upstreamPort"
-                    "origin" -> "http://$upstreamHost:$upstreamPort"
-                    "referer" -> "http://$upstreamHost:$upstreamPort/"
+                    // Same-origin only (enforced above): map our origin to the
+                    // upstream's. Absent origins stay absent.
+                    "origin" -> upstreamOrigin
+                    "referer" -> when {
+                        value.startsWith(gatewayOrigin) -> upstreamOrigin + value.substring(gatewayOrigin.length)
+                        value.startsWith(gatewayOriginAlt) -> upstreamOrigin + value.substring(gatewayOriginAlt.length)
+                        else -> value
+                    }
                     else -> value
                 }
                 rewritten.append(key).append(": ").append(v).append("\r\n")
@@ -251,6 +285,22 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
         }
     }
 
+    /** Reject an unauthorized or malformed request before any upstream contact. */
+    private fun reject(client: Socket, code: Int, reason: String): Boolean {
+        try {
+            val body = reason.toByteArray(Charsets.UTF_8)
+            val head = "HTTP/1.1 $code $reason\r\nConnection: close\r\n" +
+                    "Content-Type: text/plain\r\nContent-Length: ${body.size}\r\n\r\n"
+            val out = client.getOutputStream()
+            out.write(head.toByteArray(Charsets.ISO_8859_1))
+            out.write(body)
+            out.flush()
+        } catch (_: IOException) {
+        }
+        closeQuietly(client)
+        return false
+    }
+
     override fun close() {
         try {
             server?.close()
@@ -262,5 +312,19 @@ class Gateway(private val upstreamHost: String, private val upstreamPort: Int) :
 
     companion object {
         private const val TAG = "GBCodeGateway"
+        private val ALLOWED_METHODS = setOf("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+        private val HTTP_VERSIONS = setOf("HTTP/1.0", "HTTP/1.1")
+
+        /**
+         * The APK gateway forwards to loopback backends only: a remote backend
+         * would send credentials over plaintext sockets (S02.03). Remote/TLS
+         * backends need their own reviewed design, not a silent downgrade.
+         */
+        @JvmStatic
+        fun isLoopbackHost(host: String): Boolean {
+            val h = host.lowercase().removePrefix("[").removeSuffix("]")
+            return h == "localhost" || h == "::1" || h == "0:0:0:0:0:0:0:1" ||
+                    Regex("""^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$""").matches(h)
+        }
     }
 }

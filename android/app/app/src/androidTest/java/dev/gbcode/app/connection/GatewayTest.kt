@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -353,5 +354,96 @@ class GatewayTest {
         } finally {
             holder.close()
         }
+    }
+
+    private fun rawRequest(gwPort: Int, head: String): String {
+        val socket = Socket()
+        socket.connect(InetSocketAddress("127.0.0.1", gwPort), 5000)
+        socket.soTimeout = 8000
+        socket.getOutputStream().write(head.toByteArray(Charsets.ISO_8859_1))
+        socket.getOutputStream().flush()
+        val out = ByteArrayOutputStream()
+        val buf = ByteArray(4096)
+        while (true) {
+            val n = try {
+                socket.getInputStream().read(buf)
+            } catch (_: Exception) {
+                -1
+            }
+            if (n < 0) break
+            out.write(buf, 0, n)
+        }
+        socket.close()
+        return String(out.toByteArray(), Charsets.ISO_8859_1)
+    }
+
+    @Test
+    fun foreignOriginIsRejectedWithoutUpstreamContact() {
+        val port = gateway!!.port
+        val resp = rawRequest(port,
+            "GET /json HTTP/1.1\r\nHost: 127.0.0.1:$port\r\nOrigin: http://evil.example\r\n\r\n")
+        assertTrue("got: $resp", resp.startsWith("HTTP/1.1 403"))
+        assertEquals(null, upstream!!.lastHost) // upstream must not be contacted
+    }
+
+    @Test
+    fun wrongHostIsRejected() {
+        val port = gateway!!.port
+        val resp = rawRequest(port,
+            "GET /json HTTP/1.1\r\nHost: evil.example\r\n\r\n")
+        assertTrue("got: $resp", resp.startsWith("HTTP/1.1 421"))
+        assertEquals(null, upstream!!.lastHost)
+    }
+
+    @Test
+    fun missingHostIsRejected() {
+        val resp = rawRequest(gateway!!.port, "GET /json HTTP/1.1\r\n\r\n")
+        assertTrue("got: $resp", resp.startsWith("HTTP/1.1 400"))
+        assertEquals(null, upstream!!.lastHost)
+    }
+
+    @Test
+    fun absoluteFormTargetIsRejected() {
+        val port = gateway!!.port
+        val resp = rawRequest(port,
+            "GET http://evil.example/json HTTP/1.1\r\nHost: 127.0.0.1:$port\r\n\r\n")
+        assertTrue("got: $resp", resp.startsWith("HTTP/1.1 400"))
+        assertEquals(null, upstream!!.lastHost)
+    }
+
+    @Test
+    fun connectMethodIsRejected() {
+        val port = gateway!!.port
+        val resp = rawRequest(port,
+            "CONNECT evil.example:443 HTTP/1.1\r\nHost: 127.0.0.1:$port\r\n\r\n")
+        assertTrue("got: $resp", resp.startsWith("HTTP/1.1 400"))
+        assertEquals(null, upstream!!.lastHost)
+    }
+
+    @Test
+    fun sameOriginRequestIsProxiedWithRewrittenOrigin() {
+        val port = gateway!!.port
+        val resp = rawRequest(port,
+            "GET /json HTTP/1.1\r\nHost: 127.0.0.1:$port\r\n" +
+                    "Origin: http://127.0.0.1:$port\r\n" +
+                    "Referer: http://127.0.0.1:$port/editor\r\n\r\n")
+        assertTrue("got: $resp", resp.startsWith("HTTP/1.1 200"))
+        assertEquals("http://127.0.0.1:${upstream!!.port}", upstream!!.lastOrigin)
+    }
+
+    @Test
+    fun localhostHostIsAccepted() {
+        val port = gateway!!.port
+        val resp = rawRequest(port, "GET /json HTTP/1.1\r\nHost: localhost:$port\r\n\r\n")
+        assertTrue("got: $resp", resp.startsWith("HTTP/1.1 200"))
+    }
+
+    @Test
+    fun gatewayRejectsNonLoopbackUpstream() {
+        val gw = Gateway("example.com", 8080)
+        assertThrows(IllegalArgumentException::class.java) {
+            gw.start(0)
+        }
+        gw.close()
     }
 }

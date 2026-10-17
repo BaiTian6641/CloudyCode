@@ -54,6 +54,12 @@ public final class NativeBridge {
                 (view, message, sourceOrigin, isMainFrame, replyProxy) -> {
                     String origin = sourceOrigin == null ? "" : sourceOrigin.toString();
                     String body = message == null || message.getData() == null ? "" : message.getData();
+                    // Defense in depth: the platform origin allowlist already
+                    // filters, but the bridge must fail closed on its own too.
+                    if (!allowedOrigin.equals(origin)) {
+                        listener.onBridgeMessage("__rejected_origin__", new JSONObject(), origin);
+                        return;
+                    }
                     if (!isMainFrame) {
                         listener.onBridgeMessage("__rejected_subframe__", new JSONObject(), origin);
                         return;

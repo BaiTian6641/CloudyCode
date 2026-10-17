@@ -34,8 +34,25 @@ class WorkbenchActivity : Activity() {
         }
 
         val upstream = java.net.URI(backend)
+        val scheme = upstream.scheme?.lowercase()
         val upstreamHost = upstream.host ?: "127.0.0.1"
-        val upstreamPort = if (upstream.port > 0) upstream.port else 80
+        val upstreamPort = when {
+            upstream.port > 0 -> upstream.port
+            scheme == "https" -> 443
+            else -> 80
+        }
+        // Fail closed: only http loopback backends. A remote or https backend
+        // would put the login credential on a plaintext path or silently
+        // downgrade; that needs a reviewed design, not a guess (S02.03).
+        if (scheme != "http" || !Gateway.isLoopbackHost(upstreamHost)) {
+            val msg = "backend URL rejected: only http loopback backends are supported (got $backend)"
+            android.util.Log.e("GBCodeWorkbench", msg)
+            val errorView = android.widget.TextView(this)
+            errorView.text = "GBCode: $msg"
+            errorView.setPadding(48, 96, 48, 48)
+            setContentView(errorView)
+            return
+        }
 
         gateway = Gateway(upstreamHost, upstreamPort).also { it.start(PREFERRED_GATEWAY_PORT) }
         val origin = "http://127.0.0.1:${gateway!!.port}"
