@@ -266,8 +266,7 @@ Description=Cloudy X11 token proxy
 After=cloudy-x11.service
 
 [Service]
-ExecStart=/usr/bin/python3 $BASE/cloudy-x11-proxy.py --token-file $BASE/x11-token \
-  --listen 0.0.0.0:14500 --upstream 127.0.0.1:14501
+ExecStart=/usr/bin/python3 $BASE/cloudy-x11-proxy.py --token-file $BASE/x11-token --listen 0.0.0.0:14500 --upstream 127.0.0.1:14501
 Restart=on-failure
 RestartSec=2
 
@@ -275,8 +274,10 @@ RestartSec=2
 WantedBy=default.target
 UNIT
 
+pkill -f 'cloudy-x11-proxy.py' 2>/dev/null || true
 systemctl --user daemon-reload
-systemctl --user enable --now cloudy-x11.service cloudy-x11-proxy.service || true
+systemctl --user enable --now cloudy-x11.service cloudy-x11-proxy.service \
+  || echo "systemd user start failed (will fall back to direct start)"
 loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER" 2>/dev/null || true
 sleep 2
 
@@ -289,8 +290,8 @@ if ! systemctl --user is-active cloudy-x11.service >/dev/null 2>&1; then
     --tcp-auth=none --mdns=no --notifications=no || true
   sleep 2
 fi
-if ! systemctl --user is-active cloudy-x11-proxy.service >/dev/null 2>&1; then
-  echo "proxy service inactive; starting it directly"
+if ! ss -ltn 2>/dev/null | grep -q ':14500'; then
+  echo "proxy not listening; starting it directly"
   nohup python3 "$BASE/cloudy-x11-proxy.py" --token-file "$BASE/x11-token" \
     --listen 0.0.0.0:14500 --upstream 127.0.0.1:14501 >"$BASE/x11-proxy.log" 2>&1 &
   sleep 1
@@ -301,6 +302,12 @@ systemctl --user --no-pager status cloudy-x11.service 2>/dev/null | head -6 || t
 systemctl --user --no-pager status cloudy-x11-proxy.service 2>/dev/null | head -6 || true
 echo "xpra sessions:"; xpra list 2>/dev/null || true
 echo "listeners:"; ss -ltn 2>/dev/null | grep -E ':14500|:14501' || true
+if ! ss -ltn 2>/dev/null | grep -q ':14500'; then
+  echo "== proxy did not start: diagnostics =="
+  systemctl --user --no-pager status cloudy-x11-proxy.service 2>/dev/null | head -12 || true
+  journalctl --user -u cloudy-x11-proxy -n 20 --no-pager 2>/dev/null || true
+  tail -20 "$BASE/x11-proxy.log" 2>/dev/null || true
+fi
 echo
 echo "Open GUI apps in the VM with:"
 echo "  DISPLAY=:100 firefox &"
