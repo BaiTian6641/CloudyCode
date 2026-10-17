@@ -127,6 +127,7 @@ class X11Activity : Activity() {
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
+        if (dev.gbcode.app.BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
     }
 
     private fun applyIsolatedProfile(view: WebView): Boolean = try {
@@ -212,10 +213,10 @@ class X11Activity : Activity() {
         override fun run() {
             if (!polling) return
             probe.execute {
-                val authenticated = profileReady && authenticate()
+                val auth = if (profileReady) authenticate() else Auth.UNREACHABLE
                 runOnUiThread {
                     if (!polling) return@runOnUiThread
-                    if (authenticated) {
+                    if (auth == Auth.OK) {
                         downCount = 0
                         if (!loaded) {
                             setupView.visibility = View.GONE
@@ -230,6 +231,9 @@ class X11Activity : Activity() {
                         else if (!profileReady) showSetup(
                             "This WebView build lacks isolated profiles, so the X11 window stays " +
                                 "disabled for safety.")
+                        else if (auth == Auth.MISMATCH) showSetup(
+                            "The X11 endpoint is running but rejected this app's token. Re-run " +
+                                "the setup from this window (Copy X11 setup command).")
                         else showSetup("Looking for the X11 server…")
                     }
                     handler.postDelayed(this, 2000)
@@ -238,7 +242,9 @@ class X11Activity : Activity() {
         }
     }
 
-    private fun authenticate(): Boolean = try {
+    private enum class Auth { OK, UNREACHABLE, MISMATCH }
+
+    private fun authenticate(): Auth = try {
         val nonceBytes = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val nonce = nonceBytes.joinToString("") { "%02x".format(it) }
         val conn = URL("$ORIGIN/__cloudy/ping?nonce=$nonce").openConnection() as HttpURLConnection
@@ -250,9 +256,14 @@ class X11Activity : Activity() {
         mac.init(SecretKeySpec(token.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         val expected = mac.doFinal(nonce.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
-        MessageDigest.isEqual(body.toByteArray(Charsets.UTF_8), expected.toByteArray(Charsets.UTF_8))
+        if (MessageDigest.isEqual(body.toByteArray(Charsets.UTF_8), expected.toByteArray(Charsets.UTF_8)))
+            Auth.OK else Auth.MISMATCH
+    } catch (e: java.net.SocketTimeoutException) {
+        Auth.UNREACHABLE
+    } catch (e: java.net.ConnectException) {
+        Auth.UNREACHABLE
     } catch (e: Exception) {
-        false
+        Auth.UNREACHABLE
     }
 
     private fun loseServer(reason: String) {

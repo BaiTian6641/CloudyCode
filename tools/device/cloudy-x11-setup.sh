@@ -313,8 +313,9 @@ systemctl --user daemon-reload
 systemctl --user enable --now cloudy-x11.service cloudy-x11-proxy.service || true
 loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER" 2>/dev/null || true
 sleep 3
-if ! systemctl --user is-active cloudy-x11.service >/dev/null 2>&1; then
-  echo "systemd user unit not active; starting xpra directly"
+if ! systemctl --user is-active cloudy-x11.service >/dev/null 2>&1 || \
+   ! systemctl --user is-active cloudy-x11-proxy.service >/dev/null 2>&1; then
+  echo "one or more X11 units are inactive; starting xpra and the proxy directly"
   "$BASE/cloudy-x11-start.sh" || true
 fi
 echo "== status =="
