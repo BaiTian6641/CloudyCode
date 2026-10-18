@@ -400,3 +400,11 @@ is missing.
   for physical shortcuts.
 - A follow-up Firefox host did not map in the next terminal injection, so the
   synthesized Ctrl+O and a true transient dialog are not yet verified.
+
+
+## True transient-dialog blocker
+
+`zenity` is not installed in the VM. Firefox was launched as a native host, but
+a follow-up Ctrl+O attempt did not map a dialog host; the role-3 admission code
+is present but a true transient dialog has not been exercised. No claim is made
+that dialog behavior is verified.
