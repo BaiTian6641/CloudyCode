@@ -388,3 +388,15 @@ Journald diagnostic from the VM:
 The integrated terminal/backend child processes inherit the environment.
 No backend restart was needed; setup now restarts a stale backend if DISPLAY
 is missing.
+
+
+## Hardware text and shortcut forwarding
+
+- Firefox address-bar test: two hardware key events produced visible text in
+  the X client, proving `lorieOutputText` path works.
+- The first Ctrl+O test produced repeated `o` text instead of a shortcut:
+  Android delivered a combined meta event, and only the physical O key was
+  forwarded. Added modifier synthesis (Ctrl/Alt/Meta press + key + release)
+  for physical shortcuts.
+- A follow-up Firefox host did not map in the next terminal injection, so the
+  synthesized Ctrl+O and a true transient dialog are not yet verified.

@@ -251,6 +251,24 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val iface = engine
         if (iface != null && windowId > 0 && outputId > 0) {
+            val physical = physicalKeys[event.keyCode]
+            if (physical != null &&
+                (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed)) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    val modifiers = buildList {
+                        if (event.isCtrlPressed) add(37)
+                        if (event.isAltPressed) add(64)
+                        if (event.isMetaPressed) add(133)
+                    }
+                    modifiers.forEach { iface.sendKey(outputId, windowId, it, true) }
+                    iface.sendKey(outputId, windowId, physical, true)
+                    iface.sendKey(outputId, windowId, physical, false)
+                    modifiers.asReversed().forEach {
+                        iface.sendKey(outputId, windowId, it, false)
+                    }
+                }
+                return true
+            }
             val xKey = specialKeys[event.keyCode]
             if (xKey != null) {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
@@ -415,6 +433,26 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
     }
 
     companion object {
+        private val physicalKeys = mapOf(
+            KeyEvent.KEYCODE_A to 38, KeyEvent.KEYCODE_B to 56,
+            KeyEvent.KEYCODE_C to 54, KeyEvent.KEYCODE_D to 40,
+            KeyEvent.KEYCODE_E to 26, KeyEvent.KEYCODE_F to 41,
+            KeyEvent.KEYCODE_G to 42, KeyEvent.KEYCODE_H to 43,
+            KeyEvent.KEYCODE_I to 31, KeyEvent.KEYCODE_J to 44,
+            KeyEvent.KEYCODE_K to 45, KeyEvent.KEYCODE_L to 46,
+            KeyEvent.KEYCODE_M to 58, KeyEvent.KEYCODE_N to 57,
+            KeyEvent.KEYCODE_O to 32, KeyEvent.KEYCODE_P to 33,
+            KeyEvent.KEYCODE_Q to 24, KeyEvent.KEYCODE_R to 27,
+            KeyEvent.KEYCODE_S to 39, KeyEvent.KEYCODE_T to 28,
+            KeyEvent.KEYCODE_U to 30, KeyEvent.KEYCODE_V to 55,
+            KeyEvent.KEYCODE_W to 25, KeyEvent.KEYCODE_X to 53,
+            KeyEvent.KEYCODE_Y to 29, KeyEvent.KEYCODE_Z to 52,
+            KeyEvent.KEYCODE_0 to 19, KeyEvent.KEYCODE_1 to 10,
+            KeyEvent.KEYCODE_2 to 11, KeyEvent.KEYCODE_3 to 12,
+            KeyEvent.KEYCODE_4 to 13, KeyEvent.KEYCODE_5 to 14,
+            KeyEvent.KEYCODE_6 to 15, KeyEvent.KEYCODE_7 to 16,
+            KeyEvent.KEYCODE_8 to 17, KeyEvent.KEYCODE_9 to 18,
+        )
         private val specialKeys = mapOf(
             KeyEvent.KEYCODE_ENTER to 36,
             KeyEvent.KEYCODE_DEL to 22,
