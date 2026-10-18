@@ -287,6 +287,7 @@ class NativeEngineService : Service(), X11Native.Callback {
                 }
                 connected.startReader {
                     log("tunnel reader ended")
+                    closeAllHosts("tunnel lost")
                     notifyState("error", "VM display disconnected. Reopen Cloudy X11.")
                     handler?.post {
                         log("stopping engine after tunnel loss")
@@ -296,6 +297,8 @@ class NativeEngineService : Service(), X11Native.Callback {
                 }
             } catch (e: Throwable) {
                 log("tunnel/start failed ${e.javaClass.simpleName}: ${e.message}")
+                closeAllHosts("engine start failed")
+                notifyState("error", "VM display unavailable. Reopen Cloudy X11.")
                 tunnel?.close()
                 tunnel = null
                 rendererConnected = false
@@ -539,6 +542,21 @@ class NativeEngineService : Service(), X11Native.Callback {
         file.setReadable(true, true)
         file.setWritable(false, false)
         file.setWritable(true, true)
+    }
+
+    private fun closeAllHosts(reason: String) {
+        mainHandler.post {
+            val ids = windowHosts.keys.toList()
+            windowHosts.clear()
+            for (id in ids) {
+                sendBroadcast(
+                    Intent(ACTION_WINDOW_CLOSED)
+                        .setPackage(packageName)
+                        .putExtra(EXTRA_WINDOW_ID, id),
+                )
+            }
+            log("closed all hosts ids=${ids.size} reason=$reason")
+        }
     }
 
     private fun notifyState(state: String, message: String) {

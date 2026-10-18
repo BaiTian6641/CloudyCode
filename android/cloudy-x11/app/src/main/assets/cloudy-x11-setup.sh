@@ -332,6 +332,7 @@ class Proxy:
         self.app = None
         self.app_ready = threading.Event()
         self.app_lock = threading.Lock()
+        self.send_lock = threading.Lock()
         self.streams = {}
         self.stream_lock = threading.Lock()
         self.next_sid = 1
@@ -394,14 +395,17 @@ class Proxy:
         conn.close()
 
     def send_frame(self, frame):
-        with self.app_lock:
-            app = self.app
-        if app is None:
-            return
-        try:
-            app.sendall(frame)
-        except OSError:
-            pass
+        # Multiple X client threads emit O/D/C frames. Without this lock
+        # their writes interleave and the app sees a corrupted frame type.
+        with self.send_lock:
+            with self.app_lock:
+                app = self.app
+            if app is None:
+                return
+            try:
+                app.sendall(frame)
+            except OSError:
+                pass
 
     def tunnel_server(self):
         kind, addr = self.tunnel_listen
@@ -423,9 +427,24 @@ class Proxy:
         while not self.stop.is_set():
             conn, peer = srv.accept()
             if self.app_ready.is_set():
-                log(f"rejecting second app from {peer}")
-                conn.close()
-                continue
+                # The Terminal-forwarded TCP connection can remain half-open
+                # after Cloudy-X11 restarts (the old bridge waits up to 600s).
+                # A new app tunnel is authoritative: close the stale app and
+                # its streams, then accept the replacement.
+                log(f"replacing previous app before {peer}")
+                with self.app_lock:
+                    old = self.app
+                if old is not None:
+                    try:
+                        old.close()
+                    except OSError:
+                        pass
+                self.app_ready.clear()
+                with self.stream_lock:
+                    old_clients = list(self.streams.values())
+                    self.streams.clear()
+                for client in old_clients:
+                    client.close()
             try:
                 line = b""
                 conn.settimeout(5)
@@ -478,16 +497,22 @@ class Proxy:
         except (EOFError, OSError):
             pass
         finally:
+            current = False
             with self.app_lock:
-                self.app = None
-            self.app_ready.clear()
-            with self.stream_lock:
-                clients = list(self.streams.values())
-                self.streams.clear()
-            for client in clients:
-                client.close()
+                if self.app is app:
+                    self.app = None
+                    self.app_ready.clear()
+                    current = True
+            if current:
+                with self.stream_lock:
+                    clients = list(self.streams.values())
+                    self.streams.clear()
+                for client in clients:
+                    client.close()
+                log("app disconnected")
+            else:
+                log("stale app reader ended")
             app.close()
-            log("app disconnected")
 
 
 def main():

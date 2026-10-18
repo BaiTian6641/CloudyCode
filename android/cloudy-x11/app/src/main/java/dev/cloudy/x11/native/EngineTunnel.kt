@@ -1,6 +1,7 @@
 package dev.cloudy.x11.native
 
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import android.system.Os
 import android.system.OsConstants
 import org.json.JSONObject
@@ -166,7 +167,9 @@ class EngineTunnel private constructor(
                         else -> throw IllegalStateException("bad frame type")
                     }
                 }
-            } catch (_: Exception) {
+            } catch (e: Throwable) {
+                Log.w("CloudyX11Tunnel", "reader ended " +
+                    "${e.javaClass.simpleName}: ${e.message}")
             } finally {
                 active.set(false)
                 streams.keys.toList().forEach { safeClose(it) }

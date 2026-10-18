@@ -283,3 +283,21 @@ is not reachable from the app.
   Setup now appends a shell cleanup that removes old `firefox`, `cloudy-firefox`
   and `cloudy-run` aliases/functions and aliases firefox to `/usr/bin/firefox`.
   Immediate workaround: run `/usr/bin/firefox` in Terminal (DISPLAY=:99).
+
+
+## Multi-stream Firefox and tunnel recovery
+
+- Firefox opened a native host (`Mozilla Firefox`, output 2, 812x357) but the
+  first long run ended with `CloudyX11Tunnel: bad frame type`. The VM proxy's
+  O/D/C writer serialized only the app lookup, not `sendall`; Firefox's
+  multiple X streams interleaved frame bytes. Added a dedicated `send_lock`.
+- The VM proxy also rejected a new app tunnel while the Terminal-forwarded
+  bridge was still half-open, producing HTTP 502. It now replaces a stale app
+  tunnel and clears only streams owned by that app (identity-checked reader).
+- The app closes all host tasks on tunnel loss and on engine-start failure;
+  `EngineTunnel` logs the reader exception. Live sequence: first drop closed
+  the stale host, the service reconnected, and the Firefox host reappeared and
+  remained stable.
+- Firefox must be launched as `/usr/bin/firefox` until the updated setup's
+  shell cleanup removes the old 14509 wrapper. The VM display path itself is
+  healthy (`DISPLAY=:99`, xdpyinfo, 14500).
