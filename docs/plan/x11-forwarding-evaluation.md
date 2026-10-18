@@ -370,10 +370,13 @@ flowchart LR
   backend launch), not only in interactive shells or aliases; this is what
   bypasses the Terminal's built-in X server.
 - It accepts X11 client connections and multiplexes each as a byte stream to the
-  app over the proven app-initiated connection (native WebSocket or framed
-  stream). No X11 TCP listener is exposed. The app consumes each stream with
-  `lorieServerAcceptClient(fd)`, preserving the normal X11 authorization
-  handshake.
+  app over the proven app-initiated connection. No X11 TCP listener is exposed.
+  The VM rejects new TCP binds in the xpra/forwarding `145xx` range in this
+  environment, so the VM tunnel is a **Unix socket**; the Android app cannot see
+  it directly. The existing 14500 token proxy (the Terminal-forwarded port) must
+  bridge an authenticated WebSocket to that Unix socket; the app then consumes
+  each stream with `lorieServerAcceptClient(fd)`, preserving the normal X11
+  authorization handshake.
 - The app→VM route is a device gate (S00.03): test the native socket and WebView
   separately through Terminal forwarding before making the tunnel load-bearing.
   If only WebView passes, a small local relay may bridge to the native service,

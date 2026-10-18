@@ -1144,7 +1144,7 @@ Description=Cloudy-X11 VM display proxy (:99)
 After=default.target
 
 [Service]
-ExecStart=/usr/bin/python3 $BASE/cloudy-x11-vm.py --display $DISPLAY --tunnel-listen 127.0.0.1:14511 --token-file $BASE/x11-token
+ExecStart=/usr/bin/python3 $BASE/cloudy-x11-vm.py --display $DISPLAY --tunnel-listen unix:$BASE/x11-tunnel.sock --token-file $BASE/x11-token
 Restart=on-failure
 RestartSec=2
 
@@ -1307,10 +1307,10 @@ systemctl --user daemon-reload 2>/dev/null || true
 systemctl --user enable cloudy-x11-vm.service 2>/dev/null || true
 systemctl --user restart cloudy-x11-vm.service 2>/dev/null || {
   pkill -f 'cloudy-x11-vm.py' 2>/dev/null || true
-  nohup python3 "$BASE/cloudy-x11-vm.py" --display :99 --tunnel-listen 127.0.0.1:14511 \
+  nohup python3 "$BASE/cloudy-x11-vm.py" --display :99 --tunnel-listen unix:$BASE/x11-tunnel.sock \
     --token-file "$BASE/x11-token" >"$BASE/x11-vm.log" 2>&1 &
 }
 
 echo "VM-wide X11 display: DISPLAY=:99 XAUTHORITY=$BASE/Xauthority"
-echo "Cloudy-X11 app tunnel: 127.0.0.1:14511 (VM proxy log: $BASE/x11-vm.log)"
+echo "Cloudy-X11 VM tunnel: $BASE/x11-tunnel.sock (bridged via the 14500 proxy for the app)"
 echo "Restart the Cloudy Code backend / open a new shell to inherit DISPLAY=:99."

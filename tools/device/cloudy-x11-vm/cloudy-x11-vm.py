@@ -36,7 +36,10 @@ def parse_upstream(value):
     if value.startswith("tcp:"):
         host, _, port = value[5:].rpartition(":")
         return ("tcp", (host, int(port)))
-    raise ValueError("upstream must be unix:/path or tcp:host:port")
+    if ":" in value:
+        host, _, port = value.rpartition(":")
+        return ("tcp", (host, int(port)))
+    raise ValueError("address must be unix:/path, tcp:host:port or host:port")
 
 
 def connect_addr(spec, timeout=5):

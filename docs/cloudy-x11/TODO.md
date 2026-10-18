@@ -56,12 +56,14 @@ installed with no X11 launcher; engine smoke X1a in `8666b25`.
   with a fake upstream (`hello-through-tunnel`).
 - [x] VM-wide environment installer: Xauthority, profile/`.bashrc`,
   environment.d/systemd, `/etc/profile.d`, proxy service, Cloudy Code restart note.
-- [ ] Fresh-VM setup integrated in the standalone app's setup card (VM proxy,
-  env installer, tunnel harness, prototype service); **done in source, pending
-  device setup-card run**.
-- [ ] VM X11 display test: Xvfb + tunnel harness + `DISPLAY=:99 xdpyinfo` from a
-  Terminal shell; then Cloudy Code's integrated terminal; not the Terminal
-  graphics screen.
+- [x] Fresh-VM setup integrated in the standalone app's setup card (VM proxy,
+  env installer, tunnel harness, prototype service); the setup ran in the VM.
+- [x] VM X11 display test: Xvfb + tunnel harness + `DISPLAY=:99 xdpyinfo`
+  passed; a new shell shows `DISPLAY=:99`/the Cloudy Xauthority and reaches the
+  display. TCP 145xx binds fail in this VM; the proxy tunnel is a Unix socket,
+  bridged through the existing 14500 proxy for the app.
+- [ ] Cloudy Code integrated terminal: verify the same `DISPLAY=:99` and display
+  path (same global env; restart the backend if it predates the setup).
 - [ ] Prove the app→VM route for native socket and WebView separately (S00.03).
 - [ ] Verify stale backend/old `DISPLAY` detection and setup reruns.
 - [ ] Commit with device evidence.

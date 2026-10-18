@@ -54,7 +54,7 @@ Description=Cloudy-X11 VM display proxy (:99)
 After=default.target
 
 [Service]
-ExecStart=/usr/bin/python3 $BASE/cloudy-x11-vm.py --display $DISPLAY --tunnel-listen 127.0.0.1:14511 --token-file $BASE/x11-token
+ExecStart=/usr/bin/python3 $BASE/cloudy-x11-vm.py --display $DISPLAY --tunnel-listen unix:$BASE/x11-tunnel.sock --token-file $BASE/x11-token
 Restart=on-failure
 RestartSec=2
 

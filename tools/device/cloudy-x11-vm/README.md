@@ -23,10 +23,10 @@ PY
 Xvfb :98 -screen 0 1280x800x24 -nolisten tcp -auth $BASE/Xauthority &
 xauth -f $BASE/Xauthority add :99 . "$(python3 -c 'import secrets;print(secrets.token_hex(16))')"
 # Use the same cookie for :98 and :99; simplest is the install-env.sh xauth.
-python3 cloudy-x11-vm.py --display :99 --tunnel-listen tcp:127.0.0.1:14511 --token-file $BASE/x11-token &
-python3 tunnel-test.py --connect tcp:127.0.0.1:14511 --token-file $BASE/x11-token --upstream unix:/tmp/.X11-unix/X98 &
+python3 cloudy-x11-vm.py --display :99 --tunnel-listen unix:$BASE/x11-tunnel.sock --token-file $BASE/x11-token &
+python3 tunnel-test.py --connect unix:$BASE/x11-tunnel.sock --token-file $BASE/x11-token --upstream unix:/tmp/.X11-unix/X98 &
 DISPLAY=:99 XAUTHORITY=$BASE/Xauthority xdpyinfo | head
 ```
 
-The final Android app connects the tunnel and supplies `lorieServerAcceptClient`
+The app cannot see the VM Unix socket directly: the existing 14500 token proxy (the Terminal-forwarded port) will bridge an authenticated WebSocket to this Unix socket in T3; the app then supplies `lorieServerAcceptClient`
 to the embedded X server; no X11 TCP listener is exposed.

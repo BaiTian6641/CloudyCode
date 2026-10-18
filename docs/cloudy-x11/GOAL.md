@@ -110,12 +110,16 @@ app is extracted. Do not add new X11 features back into GBCode.
   `upstream/engine.lock.json`; `LorieNative` and `lorie-smoke` build with NDK
   `27.3.13750724`. The smoke host starts on the Googlebook under the app UID:
   `native X11 ready :0`, exit 0. It is not yet integrated into the APK.
-- **T2 in progress:** VM display proxy (`:99`, token-authenticated app tunnel,
-  frame multiplexing), app-side tunnel harness, VM-wide environment installer and
-  systemd service are implemented; transport framing passed. The fresh-VM setup
-  is integrated into the standalone app's setup card. Pending: the VM X11 display
-  test from Terminal/Cloudy Code and the Android tunnel/engine host. Renderer,
-  per-window Surface tasks/resize and the standalone core API remain.
+- **T2 VM path verified:** the fresh setup ran in the VM; the VM-wide
+  `DISPLAY=:99`/`XAUTHORITY` is installed; a new shell exports `:99` and
+  `xdpyinfo` reaches the proxy/tunnel test harness at the local Xvfb (`X.Org
+  21.1.16`). The VM rejects new TCP binds in the xpra/forwarding `145xx` range
+  (`EADDRNOTAVAIL`), so the VM proxy tunnel is a **Unix socket**
+  (`$BASE/x11-tunnel.sock`); the app-facing bridge must go through the existing
+  14500 token proxy (Terminal-forwarded port), not a new TCP port. The
+  standalone app's setup asset now uses the Unix tunnel. Pending: the Cloudy Code
+  integrated-terminal env check, the Android tunnel/engine host, renderer/
+  per-window tasks and the standalone core API.
 - **Corrections:** `df86bbe` was reviewed but **not reverted**; the correction is
   forward. The shipped code is the per-app seamless/fit route, not the
   openbox/`start-desktop` WM route.
