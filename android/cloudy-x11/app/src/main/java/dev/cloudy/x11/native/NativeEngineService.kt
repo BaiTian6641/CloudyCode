@@ -32,6 +32,7 @@ class NativeEngineService : Service(), X11Native.Callback {
     private var thread: HandlerThread? = null
     @Volatile private var handler: Handler? = null
     @Volatile private var started = false
+    @Volatile private var starting = false
     private var tunnel: EngineTunnel? = null
     private var readyLatch = CountDownLatch(1)
     @Volatile private var rendererConnected = false
@@ -213,15 +214,17 @@ class NativeEngineService : Service(), X11Native.Callback {
 
     private fun startEngine() {
         log("startEngine entered")
-        if (started) {
-            log("start ignored: already started")
+        if (started || starting) {
+            log("start ignored: started=$started starting=$starting")
             return
         }
+        starting = true
         val xkb = File(filesDir, "xkb")
         try {
             ensureXkb(xkb)
         } catch (e: Throwable) {
             log("XKB staging failed ${e.javaClass.simpleName}: ${e.message}")
+            starting = false
             stopSelf()
             return
         }
@@ -269,6 +272,7 @@ class NativeEngineService : Service(), X11Native.Callback {
                 tunnel = null
                 rendererConnected = false
                 started = false
+                starting = false
                 handler?.post {
                     handler?.removeCallbacksAndMessages(null)
                     thread?.quitSafely()
@@ -307,6 +311,7 @@ class NativeEngineService : Service(), X11Native.Callback {
     private fun stopEngine() {
         if (!started) {
             log("stop without a live engine; removing service")
+            starting = false
             tunnel?.close()
             tunnel = null
             handler?.removeCallbacksAndMessages(null)

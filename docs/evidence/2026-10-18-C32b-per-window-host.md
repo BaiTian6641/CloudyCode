@@ -134,3 +134,23 @@ launcher. It starts the small session host with free-form bounds and closes the
 launcher, so the user does not need an adb-only intent. The session host starts
 or restarts the engine on create/resume/new-intent. This is the supported route
 for the next xeyes/xterm check.
+
+
+## Live engine state after single-flight fix
+
+`NativeEngineService` now serializes startup (`starting`) so the session host's
+create+resume requests cannot race two tunnel handshakes. The latest run shows:
+
+```text
+CloudyX11Session: engine start requested
+CloudyX11Native: start ignored: started=false starting=true
+CloudyX11Native: tunnel connected display=:99
+CloudyX11Native: onNativeWindow callback registered
+CloudyX11Native: native ready display=:99
+CloudyX11Renderer: renderer connected / windows committed
+```
+
+The engine and session host are alive. No X client was observed in the final
+run because ADB text input landed in the session-host window, not the Terminal
+shell. The user must tap the Terminal prompt and run xeyes; this is an input
+focus issue, not an engine/task stub.
