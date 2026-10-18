@@ -1,7 +1,8 @@
 # Evaluation: MobaXterm-style X11 forwarding on Googlebook
 
 **Date:** 2026-10-17. **Status:** decision input, superseding the assumption that
-the xpra/HTML5 viewer path can be extended into freeform per-window X11. The
+the xpra/HTML5 viewer path can be extended into freeform per-window X11.
+**Detailed execution plan:** [`../cloudy-x11/NEXT-STEPS.md`](../cloudy-x11/NEXT-STEPS.md). The
 shipped per-app seamless route (`xpra start` + Xvfb + `_fit_window`) is retained
 only as an interim demo; the openbox/`start-desktop` WM route described in
 df86bbe was never implemented. This document is Googlebook-specific; generic

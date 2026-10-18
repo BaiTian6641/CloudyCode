@@ -1,8 +1,8 @@
 # Cloudy-X11 — product goal and current state
 
 **Status:** active. **Last updated:** 2026-10-17. This is the persistent product
-goal. Read it with `TODO.md` and `android/cloudy-x11/AGENTS.md` after any context
-compaction. The long-form design is in
+goal. Read it with `TODO.md`, [`NEXT-STEPS.md`](NEXT-STEPS.md) and
+`android/cloudy-x11/AGENTS.md` after any context compaction. The long-form design is in
 [`docs/plan/x11-forwarding-evaluation.md`](../plan/x11-forwarding-evaluation.md);
 the engine decision is [`ADR-001`](../decisions/ADR-001-embedded-x11.md).
 
@@ -173,10 +173,18 @@ app is extracted. Do not add new X11 features back into GBCode.
 - The core/VM forwarder contract is reusable by the later remote-console app;
   GPLv3 notices/SBOM/source obligations pass release review.
 
+## Next execution plan
+
+[`NEXT-STEPS.md`](NEXT-STEPS.md) is the detailed task plan: C2.4 Cloudy Code
+terminal env, C2.5 the 14500 raw X11-tunnel bridge, C3.1–C3.5 the native tunnel/
+engine/window host/end-to-end/retire-xpra work, then C4/C5. It is mirrored in
+`TODO.md` and the session todo tool.
+
 ## Context recovery
 
 If context was compacted, read in this order: this file → `TODO.md` →
-`android/cloudy-x11/AGENTS.md` → `docs/plan/x11-forwarding-evaluation.md` →
+`NEXT-STEPS.md` → `android/cloudy-x11/AGENTS.md` →
+`docs/plan/x11-forwarding-evaluation.md` →
 `docs/decisions/ADR-001-embedded-x11.md`. Then check `git log --oneline -10`,
 `git status`, and the TODO's current phase. Do not undo `df86bbe`; it is kept as
 history. Do not treat the xpra prototype as the target; it is being replaced by

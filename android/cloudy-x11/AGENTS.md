@@ -1,9 +1,10 @@
 # Cloudy-X11 standalone app — agent notes
 
-Read `../../docs/cloudy-x11/GOAL.md` and `../../docs/cloudy-x11/TODO.md` before
-changing this project. Re-read them after context compaction or session recovery.
-The long-form design is `../../docs/plan/x11-forwarding-evaluation.md`; the
-engine decision is `../../docs/decisions/ADR-001-embedded-x11.md`.
+Read `../../docs/cloudy-x11/GOAL.md`, `../../docs/cloudy-x11/TODO.md` and
+`../../docs/cloudy-x11/NEXT-STEPS.md` before changing this project. Re-read them
+after context compaction or session recovery. The long-form design is
+`../../docs/plan/x11-forwarding-evaluation.md`; the engine decision is
+`../../docs/decisions/ADR-001-embedded-x11.md`.
 
 ## Boundaries
 
@@ -20,8 +21,14 @@ engine decision is `../../docs/decisions/ADR-001-embedded-x11.md`.
   canvas in the target.
 - Do not add X11 code back to the GBCode app.
 - Do not undo `df86bbe`; history is kept and corrections are forward.
-- No raw X11 TCP listener; use the app-initiated tunnel; no undocumented VM
-  control API; no claim of window-independent VM lifetime.
+- No raw X11 TCP listener; no new TCP tunnel port. The VM tunnel is the Unix
+  socket `$BASE/x11-tunnel.sock`; the app-facing path must be the existing 14500
+  token proxy with the raw `/x11-tunnel` Upgrade (C2.5). The VM rejects new
+  145xx TCP binds.
+- Do not disable X11 auth (`-ac`) in production; the app engine gets the
+  Xauthority cookie only over the authenticated tunnel.
+- Current phase: C2.4 (Cloudy Code terminal env) / C2.5 (14500 bridge), then
+  C3.1 engine bootstrap, C3.2 first free-form task. See NEXT-STEPS.
 
 ## Build
 

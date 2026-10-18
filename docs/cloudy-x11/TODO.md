@@ -1,10 +1,13 @@
 # Cloudy-X11 — execution tracker
 
 **Last updated:** 2026-10-17. Update this file in the same commit as each stage.
-The product goal and invariants are in `GOAL.md`. Read
-`android/cloudy-x11/AGENTS.md` before changing the standalone app.
+The product goal and invariants are in `GOAL.md`; the detailed execution plan is
+[`NEXT-STEPS.md`](NEXT-STEPS.md). Read `android/cloudy-x11/AGENTS.md` before
+changing the standalone app.
 
-**Current phase:** T1 — standalone app extraction/build (T0 in progress).
+**Current phase:** T2 completion — C2.4 (Cloudy Code terminal env) and C2.5
+(14500 `/x11-tunnel` bridge) next; then T3 engine host. The VM display path is
+verified (see evidence).
 
 ## T0 — Tracking and product boundary
 
@@ -62,36 +65,44 @@ installed with no X11 launcher; engine smoke X1a in `8666b25`.
   passed; a new shell shows `DISPLAY=:99`/the Cloudy Xauthority and reaches the
   display. TCP 145xx binds fail in this VM; the proxy tunnel is a Unix socket,
   bridged through the existing 14500 proxy for the app.
-- [ ] Cloudy Code integrated terminal: verify the same `DISPLAY=:99` and display
-  path (same global env; restart the backend if it predates the setup).
+- [ ] **C2.4** Cloudy Code integrated terminal: verify `DISPLAY=:99`/`XAUTHORITY`
+  and `xdpyinfo`; restart the backend if it predates the setup.
+- [ ] **C2.5** Add the 14500 `/x11-tunnel` raw HTTP Upgrade bridge to the VM Unix
+  tunnel; no new TCP port; test via the tunnel harness.
+- [ ] App-facing tunnel/engine integration belongs to C3.1/C3.4.
 - [ ] Prove the app→VM route for native socket and WebView separately (S00.03).
 - [ ] Verify stale backend/old `DISPLAY` detection and setup reruns.
 - [ ] Commit with device evidence.
 
 ## T3 — Engine host and per-window tasks
 
-- [ ] Integrate `LorieNative` in `cloudy-x11-core`; start the engine in the
-  standalone service (app UID), consume forwarded client fds with
-  `lorieServerAcceptClient`.
-- [ ] Renderer connection, `LorieGraphics` host (software first), Surface
-  lifecycle.
-- [ ] One free-form Googlebook task per Composite window family; caption/title/
-  icon; taskbar/Alt+Tab/multi-instance.
-- [ ] Two-way resize (`windowSize`, `lorieOutputResize`), DPI, min/aspect rules.
-- [ ] Input/IME/cursor/scroll/drag-drop; dialogs/transients; close/force-close.
-- [ ] Commit with emulator/device evidence.
+Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
+
+- [ ] **C3.1** Native tunnel service/JNI bootstrap: start `LorieNative`, renderer,
+  consume tunnel fds with `lorieServerAcceptClient`; app UID, no `-ac`.
+- [ ] **C3.2** Renderer/`LorieGraphics` (software first) + first free-form
+  Googlebook task/Surface; `xeyes` visible.
+- [ ] **C3.3** Resize/input/IME/close/title/icon, multi-window/dialogs.
+- [ ] **C3.4** End-to-end VM X client → 14500 → Unix tunnel → app engine → task;
+  Terminal + Cloudy Code.
+- [ ] **C3.5** Retire xpra from the default path; target-only fresh setup.
+- [ ] Commit with device evidence for each.
 
 ## T4 — Product integration and reuse
 
+Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C4.
+
+- [ ] Package `cloudy-x11-core`/`cloudy-x11-app`/`cloudy-x11-vm` boundaries;
+  Cloudy Code pairing.
 - [ ] Pairing/setup/lifecycle UX: VM required/unavailable, stop/reset, app
   update, service/notification policy.
-- [ ] Remove xpra display path and per-app wrappers from the default build.
-- [ ] Package `cloudy-x11-core` for the later remote-console app; document the
-  stable contract and a second test host.
+- [ ] Remote-console core contract + second test host.
 - [ ] GBCode/Cloudy Code remain consumers only; no code dependency.
 - [ ] Commit.
 
 ## T5 — Acceptance, security, release
+
+Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C5.
 
 - [ ] Googlebook acceptance matrix from `GOAL.md`; Terminal + Cloudy Code.
 - [ ] Performance/latency/memory; external display/scale changes.
@@ -105,10 +116,11 @@ installed with no X11 launcher; engine smoke X1a in `8666b25`.
 |---|---|---|
 | 2026-10-17 | `8666b25` | Engine `lorie-smoke` starts on Googlebook under app UID. |
 | 2026-10-17 | `29b836b`/`6a8ef6e` | Forward corrections: standalone app, VM-wide display, stage order. |
+| 2026-10-17 | `8a13464` | VM `:99` display verified; Unix tunnel; TCP 145xx unavailable; fresh setup updated. |
 
 ## Context recovery
 
-If the session was compacted: read `GOAL.md` → this file →
+If the session was compacted: read `GOAL.md` → this file → `NEXT-STEPS.md` →
 `android/cloudy-x11/AGENTS.md`; run `git log --oneline -10` and `git status`.
 Do not undo `df86bbe`. Do not add X11 back into GBCode. The prototype is not the
 target; T2/T3 replace it. Update this file before yielding.
