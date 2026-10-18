@@ -5,10 +5,12 @@ The product goal and invariants are in `GOAL.md`; the detailed execution plan is
 [`NEXT-STEPS.md`](NEXT-STEPS.md). Read `android/cloudy-x11/AGENTS.md` before
 changing the standalone app.
 
-**Current phase:** C3.2 CPU presenter/Surface after the C3.1 native path passed.
-G1, C2.4, C2.5, G3 and C3.1 are complete; G2 is partially verified (visible task
-identity/bounds/title; background launch unproven). The embedded engine is now
-reachable from the VM through the APK; no Android Surface/per-window host yet.
+**Current phase:** C3.2 per-X-window Android hosts. First VM `xeyes` pixels were
+rendered through the embedded engine into a real Android Surface; the diagnostic
+preview is not yet one task per X top-level. G1, C2.4, C2.5, G3 and C3.1 are
+complete; G2 is partially verified (visible task identity/bounds/title;
+background launch unproven). VM persistence/port-forward availability while
+Terminal is hidden is an observed external blocker.
 
 ## T0 — Tracking and product boundary
 
@@ -92,10 +94,23 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
   service, 14500 tunnel, `FamilyWild` Xauthority, `LorieNative :99`; VM
   `xdpyinfo` returned X.Org 21.1.99 through `lorieServerAcceptClient`; explicit
   stop/restart and force-stop teardown verified. Renderer/Surface is C3.2.
-- [ ] **C3.2** CPU `LorieGraphics` + ANativeWindow Surface, first known pixels,
-  then `xeyes`; 16 KB aligned JNI is a build gate.
-- [ ] **16 KB gate** every native artifact: ELF LOAD `0x4000`, APK
-  `zipalign -c -P 16` (`tools/device/verify-16kb.sh`). Verified for C3.1.
+- [x] **C3.2a** CPU `LorieGraphics` staging presenter + Surface `/x11` Binder,
+  first known pixels, and a VM `xeyes` client rendered in a real Surface
+  (`present lock=0/post=0`; evidence screenshot). Diagnostic single-XID preview,
+  not per-window.
+- [ ] **C3.2b** Per-X-window host: one independent task per normal top-level,
+  XID+incarnation registry, role policy (dialogs/popups/splash/root), two
+  concurrent applications, metadata/caption. Native tunnel lost on VM stop must
+  recover by restarting the engine session.
+- [ ] **C3.3** Real resize/input/IME/close, dialogs/multi-window, Surface
+  replacement/recreation, colored/alpha pixel fixture.
+- [x] **16 KB gate** every native artifact: ELF LOAD `0x4000`, APK
+  `zipalign -c -P 16` (`tools/device/verify-16kb.sh`). Verified for the C3.2
+  JNI/APK; Gradle `preBuild` regenerates the JNI.
+- [x] Review hardening: HMAC pre-auth before sending the tunnel token, engine
+  service/preview no longer exported, JSON config redaction, stream-close catch,
+  tunnel-loss service/engine teardown, bundled XKB asset extraction. Device
+  rerun of these final edits is pending because the VM stopped.
 - [ ] **C3.2** Renderer/`LorieGraphics` (software first) + first free-form
   Googlebook task/Surface; `xeyes` visible.
 - [ ] **C3.3** Resize/input/IME/close/title/icon, multi-window/dialogs.
@@ -136,6 +151,7 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C5.
 | 2026-10-18 | `bf75469` | 14500 X11 bridge + display cookie; Cloudy Code backend display env; setup sync. |
 | 2026-10-18 | `b363fdd` | G1 native APK-UID binary transport probe passed 25 checks. |
 | 2026-10-18 | pending | C3.1 VM `xdpyinfo` through APK into embedded X.Org 21.1.99; 16 KB JNI/APK verified. |
+| 2026-10-18 | pending | C3.2 first VM xeyes pixels in native Surface; review hardening/XKB; per-window host next. |
 | 2026-10-18 | pending | G2 visible tasks/title/bounds verified; background launch remains unproven. |
 
 ## Context recovery

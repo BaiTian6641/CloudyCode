@@ -15,10 +15,20 @@ android {
     }
 
     buildFeatures {
+        aidl = true
         buildConfig = true
     }
 }
 
 dependencies {
     implementation("androidx.webkit:webkit:1.14.0")
+}
+
+tasks.register<Exec>("buildCloudyX11Jni") {
+    workingDir = rootProject.projectDir
+    commandLine("bash", "../../tools/device/build-x11-jni.sh")
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("buildCloudyX11Jni")
 }

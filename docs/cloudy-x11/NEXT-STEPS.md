@@ -24,7 +24,7 @@ stage.
 | Cloudy Code | Backend systemd drop-in sets `DISPLAY=:99`/`XAUTHORITY`; live backend env verified. UI integrated-terminal/extension-host child follow-up. |
 | Engine | `magicdesk-x11` pinned `65c3ced0`; `LorieNative`/`lorie-smoke` build; smoke starts under app UID. API/process audit complete (`ENGINE-AUDIT.md`); not integrated. |
 | Current app transport | Still the xpra/HTML5 prototype viewer; no per-X-window host. G1 probe is diagnostic, not the viewer replacement. |
-| Native engine path | Dedicated `:x11` FGS owns tunnel/engine; VM `xdpyinfo :99` reached embedded X.Org 21.1.99. No Surface/renderer (C3.2). |
+| Native engine path | Dedicated `:x11` FGS owns tunnel/engine; VM `xdpyinfo :99` reached embedded X.Org 21.1.99. CPU presenter + Surface now render VM `xeyes`; single-XID diagnostic preview, per-window host pending. |
 | 16 KB | JNI/APK 16 KB aligned and zipaligned; `tools/device/verify-16kb.sh` passes. NDK 27.3 explicit linker flags. |
 | G2 | Visible two tasks, bounds/title updates verified; HOME+16 s launch calls did not create activities; denial mechanism not captured. |
 | Evidence | `8666b25` engine smoke; `3bb9d8e` T1 pairing + X Eyes; `5cc88f3` proxy/tunnel/setup; `8a13464` Unix display verification. |
@@ -175,20 +175,25 @@ engine stays alive; app restart tears down cleanly; no `-ac`.
 
 **Owner:** APP/NATIVE. **Priority:** P0. **Depends on:** C3.1.
 
+**Status:** first Surface/CPU presenter and VM `xeyes` pixels are verified in a
+single diagnostic preview (`docs/evidence/2026-10-18-C32-first-surface.md`).
+Per-window hosting is the remaining part.
+
 **Steps**
-1. Implement the `LorieGraphics` host (software ANativeWindow presenter first;
-   AHB/Vulkan later) and the renderer connection.
-2. Wire `window`/`windowsCommitted` callbacks to create one free-form
-   Activity/task per application window family; set title/icon
-   (`setTaskDescription`); bind the engine output and supply the Surface.
-3. Set the root screen/virtual size and the per-window size constraints from
-   `windowSize`; honor caption/content insets; do not draw system controls.
+1. Wire `window`/`windowsCommitted` events to a XID+incarnation registry; create
+   one free-form Activity/task per independent normal top-level; bind a distinct
+   nonzero output/Surface per window. No PID/stream identity.
+2. Apply the role policy: dialogs/owned hosts, popups without task entries,
+   splash handoff, no root/dock/input-only tasks; title/icon metadata.
+3. Honor content insets and window constraints; resize the engine output; test
+   two concurrent windows and a dialog.
 4. Start with `xeyes`: one task, caption title, content only; no letterboxing.
 
-**Accept:** `DISPLAY=:99 xeyes` from the Terminal appears as one free-form
-Googlebook task rendered by the engine, not the xpra viewer or Terminal screen.
+**Accept:** `DISPLAY=:99 xeyes` (and a second normal window) from the Terminal
+appears as independent free-form Googlebook tasks rendered by the engine, not
+the xpra viewer or Terminal screen.
 
-**Evidence:** device screenshot; window callback log; task metadata.
+**Evidence:** device screenshot; window callback/task metadata logs; 16 KB gate.
 
 ### C3.3 — Resize, input, IME, close, multi-window
 

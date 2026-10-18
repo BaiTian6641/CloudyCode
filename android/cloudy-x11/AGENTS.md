@@ -27,8 +27,15 @@ after context compaction or session recovery. The long-form design is
   145xx TCP binds.
 - Do not disable X11 auth (`-ac`) in production; the app engine gets the
   Xauthority cookie only over the authenticated tunnel.
-- Current phase: C3.2 CPU graphics/Surface; C3.1 is verified. G2 background
-  launch remains unproven. Read `ENGINE-AUDIT.md` before JNI/renderer changes.
+- Current phase: C3.2b per-X-window hosts. C3.2a CPU graphics/Surface and VM
+  `xeyes` pixels are verified; the current `NativePreviewActivity` is a
+  single-XID diagnostic, not the product. G2 background launch remains unproven.
+  Read `ENGINE-AUDIT.md` before JNI/renderer changes.
+- VM lifecycle: the Terminal VM/port forward can disappear when Terminal is
+  hidden or the device reboots. Do not claim window-independent VM lifetime;
+  restart/re-pair is required. The app cannot synthesize VM clients on Android.
+- Engine service/preview are app-internal; do not re-export the Surface Binder.
+  Bundled `assets/xkb.zip` stages XKB; 16 KB gate applies to every native build.
 - Googlebook Android 17 requires 16 KB page compatibility. All native artifacts
   must link with `-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384`;
   verify ELF `LOAD` align `0x4000` and APK `zipalign -c -P 16`

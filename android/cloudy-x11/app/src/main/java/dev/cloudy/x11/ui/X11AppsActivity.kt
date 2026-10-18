@@ -97,6 +97,13 @@ class X11AppsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildUi())
+        if (intent.getBooleanExtra("native_preview", false)) {
+            startActivity(Intent(this, dev.cloudy.x11.native.NativePreviewActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            // The preview is the diagnostic host; do not leave the launcher
+            // covering its Surface.
+            finish()
+        }
         if (nativeProbe) {
             status.text = "Native transport probe starting…"
             runNativeProbe()

@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".CloudyX11App"
@@ -23,6 +26,41 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".probe.TaskProbeActivity"
+            android:exported="false"
+            android:launchMode="standard"
+            android:documentLaunchMode="always"
+            android:resizeableActivity="true"
+            android:excludeFromRecents="false"
+            android:label="@string/app_name"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboardHidden" />
+        <activity
+            android:name=".native.NativePreviewActivity"
+            android:exported="false"
+            android:launchMode="standard"
+            android:documentLaunchMode="always"
+            android:resizeableActivity="true"
+            android:excludeFromRecents="false"
+            android:label="Cloudy X11 native preview"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboardHidden" />
+        <service
+            android:name=".native.NativeEngineService"
+            android:exported="false"
+            android:process=":x11"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="embedded-x11-engine" />
+        </service>
+        <service
+            android:name=".probe.TaskProbeService"
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="synthetic-task-host" />
+        </service>
         <activity
             android:name=".ui.X11Activity"
             android:exported="false"
