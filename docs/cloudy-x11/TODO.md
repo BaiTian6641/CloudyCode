@@ -29,8 +29,13 @@ verified. The live VM unit is currently stale and needs the setup/repair rerun.
   run once via the app's native **Set up X11** screen
   (`~/.local/share/cloudy/cloudy-x11-setup.sh`; v4, no xpra). The app cannot
   install VM sudo/systemd services itself.
-- **Not verified:** a fresh xeyes/xterm native task after v4; C2.4 UI integrated
-  terminal; multi-window/dialog/input/resize/close; Cloudy Code sources; C4/C5.
+- **Not verified live:** close/reopen of an auto-hosted xeyes after the new
+  unmap broadcast; C2.4 UI integrated terminal; C3.3 input/resize/multi-window;
+  Cloudy Code sources; C4/C5.
+- **Firefox:** the 14509 curl error is the retired prototype GUI wrapper, not
+  the display; `/usr/bin/firefox` is the native firefox-esr launcher. Setup now
+  clears old `firefox`/`cloudy-firefox`/`cloudy-run` shell overrides. Immediate
+  workaround: run `/usr/bin/firefox` in a new shell.
 - **Weston:** the failing weston service is Terminal/Wayland, not Cloudy-X11;
   the native path uses `DISPLAY=:99` and the embedded engine.
 

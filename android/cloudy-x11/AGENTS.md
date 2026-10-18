@@ -27,9 +27,12 @@ after context compaction or session recovery. The long-form design is
   145xx TCP binds.
 - Do not disable X11 auth (`-ac`) in production; the app engine gets the
   Xauthority cookie only over the authenticated tunnel.
-- Current phase: C3.2b per-X-window hosts. C3.2a CPU graphics/Surface and VM
-  `xeyes` pixels are verified; per-window callbacks/binding exist but are not
-  device-verified. The current preview is a diagnostic host, not the product.
+- Current phase: C3.3 host lifecycle/interaction. C3.2 auto-hosting and C3.4
+  end-to-end are live-verified; the host now closes and clears its map on X
+  window unmap, and manual close clears the map for XID reuse. Live close/reopen
+  still needs a device pass. The free-form caption title and input/IME/resize/
+  dialog behavior remain C3.3. The current preview Activity is the host, not a
+  desktop canvas.
   G2 background launch remains unproven; the VM forward can disappear when
   Terminal is covered (502), and no VM client can be synthesized on Android.
   Verify `cloudy-x11-vm.service` uses `unix:$BASE/x11-tunnel.sock` and
