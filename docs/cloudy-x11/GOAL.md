@@ -90,7 +90,9 @@ app is extracted. Do not add new X11 features back into GBCode.
   `dev.cloudy.x11`), separate Gradle project and APK. It builds (3.5 MB debug),
   installs as `dev.cloudy.x11`, and launches as its own free-form Googlebook
   task. The GBCode app's X11 activities/launcher/token/assets/resources were
-  removed; GBCode still builds (59 MB). The standalone app still carries the
+  removed; both APKs build. The release-signed GBCode update was installed on
+  the device; `dev.gbcode.app` and `dev.cloudy.x11` coexist, and GBCode no
+  longer exposes an X11 launcher. The standalone app still carries the
   existing xpra/HTML5 prototype as a temporary carrier; this is not the target
   transport. The VM still has the previous GBCode token, so the standalone
   launcher shows setup required until the new app's setup command is run.

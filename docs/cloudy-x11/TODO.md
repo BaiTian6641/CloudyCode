@@ -36,13 +36,17 @@ GBCode debug APK (59 MB) builds with no X11 references; standalone installed as
   dependency in the standalone source.
 - [x] Launcher/diagnostics/status UI; the prototype sessions still use the
   existing setup path.
-- [x] Commit with build/launch evidence.
+- [x] Commit with build/launch evidence (`5fe15a9`).
+- [x] Install both packages: `dev.cloudy.x11` standalone and the release-signed
+  GBCode update with its X11 entry removed (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`
+  with the debug key confirmed the original release-key requirement).
 
 **Evidence:** standalone `assembleDebug` status 0 (3.5 MB); GBCode
 `assembleDebug` status 0 (59 MB, no X11 refs); install/launch `dev.cloudy.x11`
 in free-form task; screenshot `/tmp/cloudy-x11-standalone.png`; launcher logs
 `session watch failed: HTTP 403` because the VM token is still the old one;
-engine smoke X1a in `8666b25`.
+GBCode release-signed update installed with no X11 launcher; engine smoke X1a in
+`8666b25`.
 
 ## T2 — VM-wide forwarding (next)
 
