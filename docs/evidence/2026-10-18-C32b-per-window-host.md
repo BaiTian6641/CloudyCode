@@ -362,3 +362,17 @@ C3.3 title/icon stays open.
 - Soft IME: `ImeTracker ... onShown` confirms showSoftInput, but no keyboard is
   visible over the on-top engine Surface. Translucent/normal Surface hides
   engine pixels. Hardware key/text forwarding is the working interaction path.
+
+
+## Multi-window verified
+
+- Ran two background xeyes clients from a clean Terminal prompt:
+  `xeyes & xeyes &`. The service hosted the existing client plus the two new
+  clients as three separate outputs/tasks:
+  - output 2, xid 0x20000a
+  - output 3, xid 0x40000a
+  - output 4, xid 0x60000a
+  Each bound its own Surface; all three `NativePreviewActivity` tasks were
+  visible simultaneously. Screenshot: `/tmp/cloudy-x11-multiwindow2.png`.
+- Role-3 dialogs are admitted by the service policy, but a true transient
+  dialog-producing client has not yet been exercised.
