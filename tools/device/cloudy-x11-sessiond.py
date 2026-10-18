@@ -305,12 +305,14 @@ class Sessions:
             return True
 
     def list(self):
+        fields = ("id", "name", "display", "port", "xpra_port", "width", "height")
         with self.lock:
-            return [{k: v for k, v in s.items() if k != "proxy_pid"}
+            return [{k: s[k] for k in fields if k in s}
                     for s in self.sessions.values()]
 
 
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
     server_version = "cloudy-x11-sessiond"
 
     def log_message(self, fmt, *args):
@@ -356,6 +358,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._auth():
             return self._json(403, {"error": "forbidden"})
+        if parsed.path == "/__cloudy/probe":
+            # G1 diagnostic only: binary echo after this session token check
+            # and the short-lived x11-probe-token check inside the module.
+            import cloudy_x11_probe
+            return cloudy_x11_probe.handle(self)
         if parsed.path == "/list":
             return self._json(200, {"sessions": self.server.sessions.list()})
         if parsed.path == "/windows":
