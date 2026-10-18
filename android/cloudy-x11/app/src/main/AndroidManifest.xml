@@ -44,6 +44,10 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboardHidden"
             android:label="@string/app_name" />
         <activity
+            android:name=".ui.SetupActivity"
+            android:exported="false"
+            android:resizeableActivity="true" />
+        <activity
             android:name=".native.NativePreviewActivity"
             android:exported="false"
             android:launchMode="standard"
@@ -69,15 +73,7 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="synthetic-task-host" />
         </service>
-        <activity
-            android:name=".ui.X11Activity"
-            android:exported="false"
-            android:launchMode="standard"
-            android:documentLaunchMode="always"
-            android:resizeableActivity="true"
-            android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
-            android:label="@string/app_name"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density" />
+
     </application>
 
     <queries>

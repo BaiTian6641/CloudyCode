@@ -235,3 +235,11 @@ and writes the same Unix/cookie VM service and 14500 bridge.
 Cloudy-X11. Its `failed to create compositor backend` error can occur
 independently; Cloudy-X11 X11 clients use `DISPLAY=:99` and the app's embedded X
 server, not weston. The setup does not install, start, or depend on weston.
+
+
+## Native setup screen
+
+The setup button now opens `SetupActivity` (no WebView, no xpra, no app picker).
+It copies the v4 command to the versioned path, opens Terminal, and is the only
+setup surface. The old `X11Activity` manifest entry was removed; the xpra viewer
+is not reachable from the app.

@@ -249,7 +249,9 @@ class X11AppsActivity : Activity() {
             LinearLayout.LayoutParams.WRAP_CONTENT))
         col.addView(Button(this).apply {
             text = "Set up X11 (one time)"
-            setOnClickListener { launchViewer(14500, null, "Cloudy X11 setup", true) }
+            setOnClickListener {
+                startActivity(Intent(this@X11AppsActivity, SetupActivity::class.java))
+            }
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT))
