@@ -323,3 +323,13 @@ is not reachable from the app.
 - Evidence: `/tmp/cloudy-x11-resize-before.png`,
   `/tmp/cloudy-x11-after-resize.png`, `/tmp/cloudy-x11-pointer-before.png`,
   `/tmp/cloudy-x11-pointer-after.png`.
+
+
+## Caption title attempt
+
+The host task descriptor already carried `label="xeyes"`, but the free-form
+caption used the Activity manifest label `"Cloudy X11 native preview"`. The
+fixed label was removed so the caption can use the per-window task description.
+A post-change screenshot needs a valid xeyes host; terminal injection did not
+submit another xeyes in this session, so the caption remains unverified and
+C3.3 title/icon stays open.
