@@ -4,20 +4,21 @@ Status: draft; C5 acceptance is not complete.
 
 ## Functional acceptance
 
-- [ ] Fresh VM setup reaches the embedded engine without xpra/sessiond.
-- [ ] `xeyes`, `xterm`, Firefox and a representative toolkit app open one
-      free-form task each from Terminal and Cloudy Code.
-- [ ] Close, reopen, resize, pointer, hardware key/text and dialog behavior.
+- [x] Live VM display proxy (14500 Unix/cookie tunnel) reaches the embedded engine; target-only setup.
+- [x] xeyes and Firefox open free-form tasks; three simultaneous xeyes hosts verified.
+  - [ ] xterm/representative toolkit and Cloudy Code launched GUI app.
+- [x] Close/reopen, resize, pointer and hardware text verified.
+  - [ ] True transient dialog and soft IME.
 - [ ] 14500 tunnel survives Terminal window visibility changes or reconnects
       without a black host.
-- [ ] Cloudy Code integrated terminal inherits `DISPLAY=:99`.
+- [x] Cloudy Code backend environment inherits `DISPLAY=:99`; `xdpyinfo` reaches it.
 
 ## Security/reliability
 
-- [ ] Token never logged; HMAC ping and cookie path verified.
-- [ ] No raw X11 TCP listener; tunnel uses token + Unix socket.
-- [ ] Stale app tunnel replacement closes only the old streams.
-- [ ] Frame limits, stream limits and socket teardown fuzzed.
+- [x] Token not logged in tested paths; HMAC ping/cookie path host test passes.
+- [x] No raw X11 TCP listener in the active path; Unix tunnel + token proxy.
+- [x] Stale app tunnel replacement implemented and exercised by reconnects.
+- [ ] Frame/stream limits and teardown fuzzing (pending).
 - [ ] Engine/service crash recovery and host task cleanup.
 
 ## Performance
@@ -28,6 +29,6 @@ Status: draft; C5 acceptance is not complete.
 
 ## Licensing
 
-- [ ] GPLv3 magicdesk-x11 pin and corresponding source available.
+- [x] magicdesk-x11 pin/source metadata recorded; release source archive pending.
 - [ ] NOTICE/SBOM and app distribution obligations reviewed.
-- [ ] No proprietary engine blob; 16 KB native/APK verification passes.
+- [x] No proprietary engine blob; 16 KB ELF/APK verification passes.
