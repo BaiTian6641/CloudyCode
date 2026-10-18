@@ -27,7 +27,7 @@ curl -fsSL https://xpra.org/xpra.asc | sudo tee /usr/share/keyrings/xpra.asc >/d
 echo "deb [signed-by=/usr/share/keyrings/xpra.asc] https://xpra.org/ $CODENAME main" \
   | sudo tee /etc/apt/sources.list.d/xpra.list >/dev/null
 sudo apt-get update
-sudo apt-get install -y --no-install-recommends xpra xpra-x11 xpra-html5 xvfb x11-utils xterm x11-apps matchbox-window-manager xdotool || {
+sudo apt-get install -y --no-install-recommends xpra xpra-x11 xpra-html5 xvfb x11-utils xterm x11-apps matchbox-window-manager xdotool openbox || {
   echo "xpra still unavailable; check the xpra.org repo for $CODENAME:" >&2
   apt-cache policy xpra >&2
   exit 1
@@ -342,12 +342,15 @@ def xpra_displays():
 
 
 class Sessions:
-    def __init__(self, base, token_file, width, height, dpi):
+    def __init__(self, base, token_file, width, height, dpi,
+                 base_display=":100", base_port=14500):
         self.base = base
         self.token_file = token_file
         self.width = width
         self.height = height
         self.dpi = dpi
+        self.base_display = base_display
+        self.base_port = base_port
         self.lock = threading.Lock()
         self.sessions = {}
         self.counter = 0
@@ -368,6 +371,50 @@ class Sessions:
                 return p
         raise RuntimeError("no free port")
 
+    def _xd(self, *args):
+        env = os.environ.copy()
+        env["DISPLAY"] = self.base_display
+        return subprocess.run(["/usr/bin/xdotool", *args], env=env,
+                              capture_output=True, text=True, timeout=5)
+
+    def windows(self):
+        """Top-level windows on the shared display (apps launched in the VM)."""
+        try:
+            found = self._xd("search", "--onlyvisible", "--maxdepth", "1",
+                             "--name", ".*").stdout.split()
+        except (OSError, subprocess.SubprocessError):
+            return []
+        result = []
+        for wid in found:
+            try:
+                geo = self._xd("getwindowgeometry", "--shell", wid)
+                vals = {}
+                for line in geo.stdout.splitlines():
+                    k, _, v = line.partition("=")
+                    vals[k] = v
+                x = int(vals.get("X", 0))
+                y = int(vals.get("Y", 0))
+                w = int(vals.get("WIDTH", 0))
+                h = int(vals.get("HEIGHT", 0))
+                if w < 2 or h < 2:
+                    continue
+                title = self._xd("getwindowname", wid).stdout.strip()
+                cls = self._xd("getwindowclassname", wid).stdout.strip()
+                if cls in ("xpra",):
+                    continue
+                result.append({"id": int(wid), "title": title, "class": cls,
+                               "x": x, "y": y, "w": w, "h": h})
+            except (ValueError, OSError, subprocess.SubprocessError):
+                continue
+        return result
+
+    def close_window(self, wid):
+        self._xd("windowclose", str(wid))
+
+    def resize_window(self, wid, w, h):
+        self._xd("windowsize", str(wid), str(w), str(h))
+        self._xd("windowmove", str(wid), "0", "0")
+
     def start(self, name, command, cls=None, width=None, height=None):
         with self.lock:
             display = self._display()
@@ -387,7 +434,7 @@ class Sessions:
                 f.write(f"exec {command}\n")
             os.chmod(wrapper, 0o700)
             cmd = [
-                "xpra", "start", f":{display}", "--daemon=yes",
+                "xpra", "start-desktop", f":{display}", "--daemon=yes",
                 f"--bind-tcp=127.0.0.1:{xpra_port}", "--html=on",
                 "--tcp-auth=none", "--mdns=no", "--notifications=no",
                 f"--xvfb={xvfb}", f"--dpi={self.dpi}",
@@ -411,8 +458,20 @@ class Sessions:
                 raise RuntimeError("xpra did not listen")
             app_env = os.environ.copy()
             app_env["DISPLAY"] = f":{display}"
+            rc = os.path.join(self.base, "openbox-rc.xml")
+            with open(rc, "w") as f:
+                f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
+                        '<openbox_config xmlns="http://openbox.org/3.4/rc">\n'
+                        '  <applications>\n'
+                        '    <application class="*"><decor>no</decor></application>\n'
+                        '  </applications>\n'
+                        '</openbox_config>\n')
             app_log_path = os.path.join(self.base, f"x11-app-{display}.log")
             app_log = open(app_log_path, "ab")
+            wm = subprocess.Popen(["/usr/bin/openbox", "--config-file", rc],
+                                  env=app_env, stdout=app_log, stderr=app_log,
+                                  start_new_session=True)
+            time.sleep(0.7)
             app = subprocess.Popen(["/bin/sh", wrapper], env=app_env,
                                    stdout=app_log, stderr=app_log,
                                    start_new_session=True)
@@ -442,7 +501,7 @@ class Sessions:
                     "port": proxy_port, "xpra_port": xpra_port,
                     "width": w, "height": h, "command": command,
                     "wrapper": wrapper, "app_pid": app.pid,
-                    "fit_stop": fit_stop}
+                    "wm_pid": wm.pid, "fit_stop": fit_stop}
             self.sessions[sid] = info | {"proxy_pid": proxy.pid}
             return {k: info[k] for k in ("id", "name", "display", "port")}
 
@@ -493,6 +552,9 @@ class Sessions:
                                    env=env, timeout=3)
                     subprocess.run(["/usr/bin/xdotool", "windowsize", best, str(w), str(h)],
                                    env=env, timeout=3)
+                    subprocess.run(["/usr/bin/xdotool", "windowstate", "--add",
+                                    "MAXIMIZED_VERT", "--add", "MAXIMIZED_HORZ", best],
+                                   env=env, timeout=3)
                     if last != (w, h):
                         log.write(f"[fit] window {best} ({best_area}px) -> {w}x{h}\n")
                         last = (w, h)
@@ -514,6 +576,10 @@ class Sessions:
             try:
                 os.killpg(os.getpgid(info["app_pid"]), signal.SIGTERM)
             except OSError:
+                pass
+            try:
+                os.kill(info["wm_pid"], signal.SIGTERM)
+            except (OSError, KeyError):
                 pass
             try:
                 subprocess.run(["xpra", "stop", info["display"]],
@@ -580,18 +646,31 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(403, {"error": "forbidden"})
         if parsed.path == "/list":
             return self._json(200, {"sessions": self.server.sessions.list()})
+        if parsed.path == "/windows":
+            return self._json(200, {
+                "windows": self.server.sessions.windows(),
+                "proxy": self.server.sessions.base_port,
+            })
         return self._json(404, {"error": "not found"})
 
     def do_POST(self):
         if not self._auth():
             return self._json(403, {"error": "forbidden"})
-        if self.path != "/start" and self.path != "/stop":
+        if self.path not in ("/start", "/stop", "/close", "/resize"):
             return self._json(404, {"error": "not found"})
         try:
             req = self._body()
         except (ValueError, json.JSONDecodeError):
             return self._json(400, {"error": "bad json"})
         try:
+            if self.path == "/close":
+                self.server.sessions.close_window(int(req.get("id", 0)))
+                return self._json(200, {"closed": True})
+            if self.path == "/resize":
+                self.server.sessions.resize_window(
+                    int(req.get("id", 0)), int(req.get("w", 0)),
+                    int(req.get("h", 0)))
+                return self._json(200, {"resized": True})
             if self.path == "/stop":
                 ok = self.server.sessions.stop(str(req.get("id", "")))
                 return self._json(200 if ok else 404,
@@ -625,10 +704,12 @@ def main():
     ap.add_argument("--width", type=int, default=2880)
     ap.add_argument("--height", type=int, default=1800)
     ap.add_argument("--dpi", type=int, default=144)
+    ap.add_argument("--base-display", default=":100")
+    ap.add_argument("--base-port", type=int, default=14500)
     args = ap.parse_args()
     host, port = args.listen.rsplit(":", 1)
     sessions = Sessions(args.base_dir, args.token_file, args.width,
-                        args.height, args.dpi)
+                        args.height, args.dpi, args.base_display, args.base_port)
     srv = Server((host, int(port)), Handler)
     srv.sessions = sessions
     print(f"[cloudy-x11-sessiond] listening {args.listen}", flush=True)
@@ -646,7 +727,7 @@ Description=Cloudy X11 seamless server (xpra, loopback)
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/xpra start :100 --daemon=no --bind-tcp=127.0.0.1:14501 --html=on --tcp-auth=none --mdns=no --notifications=no --xvfb="/usr/bin/Xvfb -screen 0 2880x1800x24" --dpi=144 --encoding=png --video-encoders=none --quality=100 --min-quality=100
+ExecStart=/usr/bin/xpra start :100 --daemon=no --bind-tcp=127.0.0.1:14501 --html=on --sharing=yes --tcp-auth=none --mdns=no --notifications=no --xvfb="/usr/bin/Xvfb -screen 0 2880x1800x24" --dpi=144 --encoding=png --video-encoders=none --quality=100 --min-quality=100
 Restart=on-failure
 RestartSec=2
 
@@ -731,3 +812,9 @@ echo
 echo "Open the Cloudy X11 launcher and pick an application; each opens in its"
 echo "own Googlebook window. The full desktop session is still DISPLAY=:100."
 echo "If nothing appears: journalctl --user -u cloudy-x11 -u cloudy-x11-proxy -u cloudy-x11-sessiond -n 40 --no-pager"
+
+# Apps launched from the Terminal connect to the shared Cloudy X display.
+BASHRC="$HOME/.bashrc"
+touch "$BASHRC"
+grep -q 'export DISPLAY=:100' "$BASHRC" 2>/dev/null || echo 'export DISPLAY=:100' >> "$BASHRC"
+grep -q 'alias firefox=' "$BASHRC" 2>/dev/null || echo "alias firefox='/usr/bin/firefox-esr'" >> "$BASHRC"

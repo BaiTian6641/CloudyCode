@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import org.json.JSONObject
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.util.Log
@@ -62,6 +63,10 @@ class X11Activity : Activity() {
     private val port: Int by lazy { intent.getIntExtra("port", DEFAULT_PORT) }
     private val sessionId: String? by lazy { intent.getStringExtra("sid") }
     private val sessionName: String? by lazy { intent.getStringExtra("name") }
+    private val windowTitle: String? by lazy { intent.getStringExtra("name") }
+    private val windowId: Int? by lazy {
+        if (intent.hasExtra("winId")) intent.getIntExtra("winId", 0) else null
+    }
     private val forceSetup: Boolean by lazy { intent.getBooleanExtra("setup", false) }
     private val origin: String by lazy { "http://$HOST:$port" }
     private var lastWidth = 0
@@ -76,6 +81,17 @@ class X11Activity : Activity() {
         val w = if (webView.width > 0) webView.width
             else getSystemService(WindowManager::class.java).currentWindowMetrics.bounds.width()
         if (w != lastWidth) {
+            windowId?.let { id ->
+                val hh = webView.height.coerceAtLeast(240)
+                Thread {
+                    try {
+                        control("/resize",
+                            "{\"id\":$id,\"w\":$w,\"h\":$hh}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "window resize failed: ${e.message}")
+                    }
+                }.apply { isDaemon = true }.start()
+            }
             loaded = false
             webView.stopLoading()
             webView.settings.blockNetworkLoads = true
@@ -89,8 +105,9 @@ class X11Activity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setTitle(sessionName ?: "Cloudy X11")
-        sessionName?.let { setTaskDescription(ActivityManager.TaskDescription(it)) }
+        val title = windowTitle ?: sessionName ?: "Cloudy X11"
+        setTitle(title)
+        setTaskDescription(ActivityManager.TaskDescription(title))
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         buildUi()
         startPolling()
@@ -150,6 +167,7 @@ class X11Activity : Activity() {
                 override fun onPageFinished(view: WebView, url: String) {
                     Log.i(TAG, "X11 client loaded: $url")
                     injectClientCss()
+                    if (windowId != null) injectWindowFilter()
                     hideIme()
                 }
 
@@ -271,11 +289,16 @@ class X11Activity : Activity() {
                                 .currentWindowMetrics.bounds
                             val width = if (webView.width > 0) webView.width else bounds.width()
                             lastWidth = width
-                            val override = if (sessionId != null)
-                                "&override_width=$width&cloudy_w=$width" else ""
+                            val override = when {
+                                windowId != null ->
+                                    "&override_width=$width&cloudy_w=$width&cloudy_win=${windowId}"
+                                sessionId != null ->
+                                    "&override_width=$width&cloudy_w=$width"
+                                else -> ""
+                            }
                             Log.d(TAG, "load port=$port width=$width")
                             webView.loadUrl("$origin/?floating_menu=no&autohide=yes" +
-                                "&border=no&video=no&encoding=png$override")
+                                "&border=no&video=no&encoding=png&sharing=yes&steal=no&username=cloudy_$windowId$override")
                             loaded = true
                         }
                     } else {
@@ -377,7 +400,8 @@ class X11Activity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        sessionName?.let {
+        val title = windowTitle ?: sessionName
+        title?.let {
             setTitle(it)
             setTaskDescription(ActivityManager.TaskDescription(it))
         }
@@ -394,12 +418,19 @@ class X11Activity : Activity() {
     override fun onDestroy() {
         polling = false
         handler.removeCallbacks(probeRunnable)
-        if (isFinishing) sessionId?.let { sid ->
-            Thread {
-                try { stopSession(sid) } catch (e: Exception) {
-                    Log.w(TAG, "session stop failed: ${e.message}")
-                }
-            }.apply { isDaemon = true }.start()
+        if (isFinishing) {
+            windowId?.let { id ->
+                Thread {
+                    try { control("/close", "{\"id\":$id}") }
+                    catch (e: Exception) { Log.w(TAG, "window close failed: ${e.message}") }
+                }.apply { isDaemon = true }.start()
+            } ?: sessionId?.let { sid ->
+                Thread {
+                    try { stopSession(sid) } catch (e: Exception) {
+                        Log.w(TAG, "session stop failed: ${e.message}")
+                    }
+                }.apply { isDaemon = true }.start()
+            }
         }
         probe.shutdownNow()
         webView.stopLoading()
@@ -439,6 +470,56 @@ class X11Activity : Activity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideIme()
+    }
+
+    private fun injectWindowFilter() {
+        val id = windowId ?: return
+        val titleJson = JSONObject.quote(windowTitle ?: "")
+        val js = """
+            (function(){
+              const WID = "$id";
+              const TITLE = $titleJson;
+              function fit(){
+                try {
+                  if (typeof client === 'undefined' || !client.id_to_window) return;
+                  let target = client.id_to_window[WID];
+                  if (!target && TITLE) {
+                    for (const k in client.id_to_window) {
+                      const w = client.id_to_window[k];
+                      if (w && w.metadata && w.metadata.title === TITLE) { target = w; break; }
+                    }
+                  }
+                  for (const k in client.id_to_window) {
+                    const w = client.id_to_window[k];
+                    if (w && w.div) w.div.style.display = (w === target) ? '' : 'none';
+                  }
+                  if (target && target.div) {
+                    target.div.style.left = '0px';
+                    target.div.style.top = '0px';
+                  }
+                  const scr = document.getElementById('screen');
+                  if (scr) { scr.style.overflow = 'hidden'; scr.style.background = '#000'; }
+                  document.body.style.background = '#000';
+                } catch(e) {}
+              }
+              fit();
+              setInterval(fit, 350);
+            })()
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
+    }
+
+    private fun control(path: String, body: String) {
+        val conn = URL("http://$HOST:$CONTROL_PORT$path").openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Cookie", "$COOKIE=$token")
+        conn.connectTimeout = 1500
+        conn.readTimeout = 3000
+        conn.outputStream.use { it.write(body.toByteArray()) }
+        conn.responseCode
+        conn.disconnect()
     }
 
     private fun stopSession(sid: String) {

@@ -70,12 +70,15 @@ def xpra_displays():
 
 
 class Sessions:
-    def __init__(self, base, token_file, width, height, dpi):
+    def __init__(self, base, token_file, width, height, dpi,
+                 base_display=":100", base_port=14500):
         self.base = base
         self.token_file = token_file
         self.width = width
         self.height = height
         self.dpi = dpi
+        self.base_display = base_display
+        self.base_port = base_port
         self.lock = threading.Lock()
         self.sessions = {}
         self.counter = 0
@@ -95,6 +98,50 @@ class Sessions:
             if port_free(p):
                 return p
         raise RuntimeError("no free port")
+
+    def _xd(self, *args):
+        env = os.environ.copy()
+        env["DISPLAY"] = self.base_display
+        return subprocess.run(["/usr/bin/xdotool", *args], env=env,
+                              capture_output=True, text=True, timeout=5)
+
+    def windows(self):
+        """Top-level windows on the shared display (apps launched in the VM)."""
+        try:
+            found = self._xd("search", "--onlyvisible", "--maxdepth", "1",
+                             "--name", ".*").stdout.split()
+        except (OSError, subprocess.SubprocessError):
+            return []
+        result = []
+        for wid in found:
+            try:
+                geo = self._xd("getwindowgeometry", "--shell", wid)
+                vals = {}
+                for line in geo.stdout.splitlines():
+                    k, _, v = line.partition("=")
+                    vals[k] = v
+                x = int(vals.get("X", 0))
+                y = int(vals.get("Y", 0))
+                w = int(vals.get("WIDTH", 0))
+                h = int(vals.get("HEIGHT", 0))
+                if w < 2 or h < 2:
+                    continue
+                title = self._xd("getwindowname", wid).stdout.strip()
+                cls = self._xd("getwindowclassname", wid).stdout.strip()
+                if cls in ("xpra",):
+                    continue
+                result.append({"id": int(wid), "title": title, "class": cls,
+                               "x": x, "y": y, "w": w, "h": h})
+            except (ValueError, OSError, subprocess.SubprocessError):
+                continue
+        return result
+
+    def close_window(self, wid):
+        self._xd("windowclose", str(wid))
+
+    def resize_window(self, wid, w, h):
+        self._xd("windowsize", str(wid), str(w), str(h))
+        self._xd("windowmove", str(wid), "0", "0")
 
     def start(self, name, command, cls=None, width=None, height=None):
         with self.lock:
@@ -327,18 +374,31 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(403, {"error": "forbidden"})
         if parsed.path == "/list":
             return self._json(200, {"sessions": self.server.sessions.list()})
+        if parsed.path == "/windows":
+            return self._json(200, {
+                "windows": self.server.sessions.windows(),
+                "proxy": self.server.sessions.base_port,
+            })
         return self._json(404, {"error": "not found"})
 
     def do_POST(self):
         if not self._auth():
             return self._json(403, {"error": "forbidden"})
-        if self.path != "/start" and self.path != "/stop":
+        if self.path not in ("/start", "/stop", "/close", "/resize"):
             return self._json(404, {"error": "not found"})
         try:
             req = self._body()
         except (ValueError, json.JSONDecodeError):
             return self._json(400, {"error": "bad json"})
         try:
+            if self.path == "/close":
+                self.server.sessions.close_window(int(req.get("id", 0)))
+                return self._json(200, {"closed": True})
+            if self.path == "/resize":
+                self.server.sessions.resize_window(
+                    int(req.get("id", 0)), int(req.get("w", 0)),
+                    int(req.get("h", 0)))
+                return self._json(200, {"resized": True})
             if self.path == "/stop":
                 ok = self.server.sessions.stop(str(req.get("id", "")))
                 return self._json(200 if ok else 404,
@@ -372,10 +432,12 @@ def main():
     ap.add_argument("--width", type=int, default=2880)
     ap.add_argument("--height", type=int, default=1800)
     ap.add_argument("--dpi", type=int, default=144)
+    ap.add_argument("--base-display", default=":100")
+    ap.add_argument("--base-port", type=int, default=14500)
     args = ap.parse_args()
     host, port = args.listen.rsplit(":", 1)
     sessions = Sessions(args.base_dir, args.token_file, args.width,
-                        args.height, args.dpi)
+                        args.height, args.dpi, args.base_display, args.base_port)
     srv = Server((host, int(port)), Handler)
     srv.sessions = sessions
     print(f"[cloudy-x11-sessiond] listening {args.listen}", flush=True)

@@ -42,6 +42,42 @@ class X11AppsActivity : Activity() {
     private lateinit var custom: EditText
     private var presetButtons: List<Button> = emptyList()
     private var probing = false
+    private var watching = false
+    private val opened = mutableSetOf<Int>()
+
+    private val watchRunnable = object : Runnable {
+        override fun run() {
+            if (!watching) return
+            io.execute {
+                try {
+                    val res = get("/windows")
+                    val proxy = res.optInt("proxy", 14500)
+                    val arr = res.optJSONArray("windows")
+                    val current = mutableSetOf<Int>()
+                    val items = mutableListOf<JSONObject>()
+                    for (i in 0 until (arr?.length() ?: 0)) {
+                        val o = arr?.optJSONObject(i) ?: continue
+                        val id = o.optInt("id")
+                        if (id != 0) {
+                            current.add(id)
+                            items.add(o)
+                        }
+                    }
+                    handler.post {
+                        opened.retainAll(current)
+                        for (o in items) {
+                            val id = o.optInt("id")
+                            if (id != 0 && opened.add(id)) openWindow(o, proxy)
+                        }
+                        if (watching) handler.postDelayed(this, 2000)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "window watch failed: ${e.message}")
+                    handler.post { if (watching) handler.postDelayed(this, 3000) }
+                }
+            }
+        }
+    }
 
     private data class Preset(val app: String, val label: String)
 
@@ -60,9 +96,21 @@ class X11AppsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         probe()
+        if (!watching) {
+            watching = true
+            handler.post(watchRunnable)
+        }
+    }
+
+    override fun onPause() {
+        watching = false
+        handler.removeCallbacks(watchRunnable)
+        super.onPause()
     }
 
     override fun onDestroy() {
+        watching = false
+        handler.removeCallbacks(watchRunnable)
         io.shutdownNow()
         super.onDestroy()
     }
@@ -224,6 +272,41 @@ class X11AppsActivity : Activity() {
                 }
             }
         }
+    }
+
+    private fun get(path: String): JSONObject {
+        val conn = URL("$CONTROL$path").openConnection() as HttpURLConnection
+        conn.setRequestProperty("Cookie", "cloudy_x11=$token")
+        conn.connectTimeout = 2000
+        conn.readTimeout = 4000
+        val code = conn.responseCode
+        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+            ?.bufferedReader()?.use { it.readText() }.orEmpty()
+        conn.disconnect()
+        if (code != 200) throw IllegalStateException("HTTP $code")
+        return JSONObject(text)
+    }
+
+    private fun openWindow(o: JSONObject, proxy: Int) {
+        val id = o.optInt("id")
+        val title = o.optString("title", "Window")
+        val x = o.optInt("x", 0)
+        val y = o.optInt("y", 0)
+        val w = o.optInt("w", 800).coerceAtLeast(320)
+        val h = o.optInt("h", 600).coerceAtLeast(240)
+        val intent = Intent(this, X11Activity::class.java).apply {
+            putExtra("port", proxy)
+            putExtra("winId", id)
+            putExtra("winW", w)
+            putExtra("winH", h)
+            putExtra("name", title)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
+                Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+        }
+        val opts = ActivityOptions.makeBasic()
+            .setLaunchBounds(Rect(x, y, x + w, y + h)).toBundle()
+        startActivity(intent, opts)
     }
 
     private fun post(path: String, body: String): JSONObject {
