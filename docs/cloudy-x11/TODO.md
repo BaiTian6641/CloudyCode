@@ -103,7 +103,9 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
   and build-verified. Device test blocked: the VM/forwarder disappeared (502)
   when Terminal was covered; task launch/G2 background restrictions untested.
   XID+incarnation registry, role policy, window removal/close and two-window
-  proof remain.
+  proof remain. Live VM unit was stale (`127.0.0.1:14511`, no cookie); fresh
+  setup writes Unix+cookie, but the live unit needs repair. Terminal input focus
+  prevented the final xeyes/xterm launch. See C3.2b evidence.
 - [ ] **C3.3** Real resize/input/IME/close, dialogs/multi-window, Surface
   replacement/recreation, colored/alpha pixel fixture.
 - [x] **16 KB gate** every native artifact: ELF LOAD `0x4000`, APK

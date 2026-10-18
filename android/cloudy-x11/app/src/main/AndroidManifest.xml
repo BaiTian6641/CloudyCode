@@ -36,6 +36,13 @@
             android:label="@string/app_name"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboardHidden" />
         <activity
+            android:name=".native.PerWindowSessionActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboardHidden"
+            android:label="@string/app_name" />
+        <activity
             android:name=".native.NativePreviewActivity"
             android:exported="false"
             android:launchMode="standard"

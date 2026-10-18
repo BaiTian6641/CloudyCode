@@ -32,6 +32,8 @@ after context compaction or session recovery. The long-form design is
   device-verified. The current preview is a diagnostic host, not the product.
   G2 background launch remains unproven; the VM forward can disappear when
   Terminal is covered (502), and no VM client can be synthesized on Android.
+  Verify `cloudy-x11-vm.service` uses `unix:$BASE/x11-tunnel.sock` and
+  `--cookie-file`; a stale unit can run yet return 502.
   Read `ENGINE-AUDIT.md` before JNI/renderer changes.
 - VM lifecycle: the Terminal VM/port forward can disappear when Terminal is
   hidden or the device reboots. Do not claim window-independent VM lifetime;

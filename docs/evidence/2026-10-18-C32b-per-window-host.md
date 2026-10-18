@@ -57,3 +57,57 @@ When the VM/forwarder is stable and a visible session host exists:
    task IDs and pixels.
 3. Then implement XID incarnation/reuse, window close/task removal, role policy,
    and G2 background-launch fallback/permission behavior.
+
+## Live-VM diagnosis (2026-10-18)
+
+The app service successfully connected to the 14500 bridge after the VM private
+proxy was started manually:
+
+```
+CloudyX11Native: tunnel connected display=:99 cookie_len=32
+CloudyX11Native: native ready display=:99
+CloudyX11Renderer: renderer connected
+CloudyX11Renderer: windows committed
+```
+
+A raw `/x11-tunnel` request returned `HTTP/1.1 101` + `CLOUDY-X11-CONFIG 1`
+after starting:
+
+```
+python3 ~/.local/share/cloudy/cloudy-x11-vm.py --display :99 \
+  --tunnel-listen unix:/home/droid/.local/share/cloudy/x11-tunnel.sock \
+  --token-file .../x11-token --cookie-file .../x11-cookie
+```
+
+The installed `cloudy-x11-vm.service` was **stale**: its ExecStart still used
+`--tunnel-listen 127.0.0.1:14511` and omitted `--cookie-file`. That unit returns
+`Active (running)` yet cannot serve `/x11-tunnel`, so the base proxy returned 502.
+The current setup/install-env source writes the Unix+cookie form; a fresh setup
+repairs it. The live VM was not cleanly rewired because the host file-transfer
+path and Terminal focus were unavailable. This is a setup/repair defect, not the
+X11 engine.
+
+`xeyes`/`xterm` were not observed by the engine in the last run; Terminal input
+focus was taken by the session host. No per-window task or window callback was
+recorded. The session host itself is now a real, app-internal Activity with
+side-by-side launch bounds; it is not a placeholder, but the final two-window
+proof remains blocked by the VM unit/focus environment.
+
+## Exact repair for the next run
+
+From a Terminal shell in the VM (or by re-running the app's X11 setup/repair):
+
+```sh
+systemctl --user cat cloudy-x11-vm.service   # must show unix:$BASE/x11-tunnel.sock and --cookie-file
+systemctl --user restart cloudy-x11-vm.service
+```
+
+Then, while Terminal remains visible and the Cloudy-X11 session host is visible:
+
+```sh
+DISPLAY=:99 XAUTHORITY=$HOME/.local/share/cloudy/Xauthority xeyes &
+DISPLAY=:99 XAUTHORITY=$HOME/.local/share/cloudy/Xauthority xterm &
+```
+
+Expected: two native window tasks, each with a distinct output/Surface; verify
+`window xid=...` callback pairs and task IDs.
