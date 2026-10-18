@@ -151,11 +151,11 @@ class Sessions:
             w = max(320, min(int(width or self.width), 8192))
             h = max(240, min(int(height or self.height), 8192))
             xvfb = (f"/usr/bin/Xvfb -screen 0 {w}x{h}x24")
-            # Single-app desktop: matchbox maximizes the app to the screen, so
-            # the X application window is the Android window. --resize-display
-            # makes the virtual screen follow the client's physical size.
-            # xpra runs --start without a shell, so a wrapper is required for
-            # "WM in background, then app" semantics.
+            # Single-app seamless session: the Xvfb screen is the requested
+            # Android window size. _fit_window moves/sizes the app's top-level
+            # to the screen with xdotool; --resize-display makes the virtual
+            # screen follow the HTML5 client's physical size. No window manager
+            # is started.
             wrapper = os.path.join(self.base, f"x11-app-{display}.sh")
             with open(wrapper, "w") as f:
                 f.write("#!/bin/sh\n")

@@ -13,15 +13,19 @@ Every X top-level window becomes a native Googlebook OS window:
 This is the MobaXterm-style model, moved from a single virtual desktop canvas to
 one OS window per X window.
 
-**Direction update (2026-10-17):** the WM route below is reclassified as an
-interim per-app demo. A re-evaluation against MobaXterm establishes that xpra's
-HTML5/native clients cannot provide true per-window identity and native resize
-(no client→server resize packet), and that the Terminal app's built-in X11
-desktop is its own compositor. The target is an embedded X server in the app
-plus an X11 forwarding proxy in the VM, one Android host per X window family;
-see [x11-forwarding-evaluation.md](x11-forwarding-evaluation.md). The embeddable
-GPLv3 `magicdesk-x11` engine is the concrete candidate; license is the open
-decision. Do not invest further in the HTML5 viewer path.
+**Direction update (2026-10-17):** the shipped code is the **per-app seamless
+xpra route** (`xpra start`, Xvfb screen, `_fit_window` via xdotool, HTML5
+viewer); the openbox/`start-desktop` WM route below was a planned experiment and
+was **not implemented**. Both are interim. A re-evaluation against MobaXterm
+establishes that xpra's HTML5/native clients cannot provide true per-window
+identity and native resize (no client→server resize packet), and that the
+Terminal app's built-in X11 desktop is its own compositor. The target is an
+embedded X server in the app plus an X11 forwarding proxy in the VM, one Android
+host per X window family; see
+[x11-forwarding-evaluation.md](x11-forwarding-evaluation.md). The embeddable
+GPLv3 `magicdesk-x11` engine is the chosen candidate
+([ADR-001](../decisions/ADR-001-embedded-x11.md)); do not invest further in the
+HTML5 viewer path.
 
 ## Protocol spike result (2026-10-17)
 
@@ -33,7 +37,7 @@ Checked the xpra source and the HTML5 client:
 - Client-side window drags are expressed as pointer events; the server's
   window manager performs the resize.
 - Therefore two viable routes exist:
-  1. **WM route (implemented now):** run an external EWMH window manager
+  1. **WM route (planned; not implemented in the shipped code):** run an external EWMH window manager
      (openbox) in a per-app `start-desktop` session, maximize the app to the
      X screen, make the X screen equal the Android window's physical size, and
      reload/resize on OS-window resize. The app fills its window and follows
@@ -44,29 +48,40 @@ Checked the xpra source and the HTML5 client:
      only way to guarantee app-window identity for arbitrary dialogs and
      clients that ignore the WM.
 
-## Architecture (WM route)
+**Shipped implementation (as of `df86bbe`):** the session daemon runs `xpra
+start` (seamless) with an Xvfb screen sized to the requested window, launches
+the app through a wrapper, and `_fit_window` moves/sizes the app's top-level to
+the screen with xdotool (`windowmove`, `windowsize`, `windowstate MAXIMIZED_*`).
+`--resize-display=yes` follows the HTML5 client's physical size. No openbox or
+`start-desktop` is started; the openbox/matchbox packages are not used.
+
+## Shipped architecture (per-app seamless + fit)
 
 ```
-Android freeform Task (one per app)
+Android freeform Task (one per app session)
   X11Activity / WebView
     token proxy 127.0.0.1:<port>
-      xpra start-desktop :N (resize-display=yes)
-        Xvfb screen = Android window physical size
-        openbox (no decorations) maximises the app
-        app (firefox-esr / xterm / custom)
+      xpra start :N (seamless, --resize-display=yes)
+        Xvfb screen = requested Android window size
+        app (wrapper; no window manager)
+        _fit_window (xdotool move/size/EWMH maximize state)
 ```
 
-- The session daemon allocates a display, xpra port, proxy port and starts
-  openbox before the app.
-- The WebView sends `cloudy_w=<physical width>`; the proxy rewrites the HTML5
-  client viewport to that width, so the X screen is physical, not CSS-sized.
-- On Android layout resize, the viewer reloads with the new width; xpra resizes
-  the X screen; the daemon re-maximises the app; openbox applies the new screen
-  size.
-- The daemon fit thread uses `xdotool windowstate --add
-  MAXIMIZED_VERT/MAXIMIZED_HORZ` on the top-level window and re-applies it after
-  screen changes.
+- The session daemon allocates the display, xpra port and proxy port, starts
+  xpra, then launches the app through a wrapper. No `start-desktop` and no
+  window manager are used.
+- `--resize-display=yes` makes the virtual screen follow the HTML5 client's
+  physical size. On Android layout resize, the viewer reloads, xpra resizes the
+  X screen, and `_fit_window` moves/sizes the app's top-level again.
+- `_fit_window` uses `xdotool search`, `windowmove`, `windowsize` and
+  `windowstate --add MAXIMIZED_VERT/MAXIMIZED_HORZ`; it re-applies on screen
+  changes and logs the result.
 - The xterm preset uses a 13pt Xft font for readable physical-pixel text.
+
+**Earlier WM-route design (not implemented):** an openbox/`start-desktop`
+session with a WM-owned maximize was designed but is absent from the shipped
+code. It is superseded by ADR-001; do not use it as a description of current
+behaviour.
 
 
 ## Dynamic window discovery (implemented)
@@ -98,10 +113,13 @@ service), and per-window dialogs.
 ## Milestones
 
 1. **Goal + protocol spike** — done (this document).
-2. **WM session** — per-app `start-desktop` + openbox + decorations off;
-   app maximised to the screen; initial OS window is exactly the app.
-3. **Coupled resize** — OS window resize → viewer reload with new physical
-   width → X screen resize → openbox/daemon re-maximise → app reflows.
+2. **WM session (planned; not implemented)** — per-app `start-desktop` +
+   openbox + decorations off; app maximised to the screen; initial OS window is
+   exactly the app.
+3. **Coupled resize (implemented for the shipped seamless route; WM variant
+   not)** — OS window resize → viewer reload with new physical width → xpra
+   `--resize-display` X screen resize → `_fit_window` re-sizes the app; the
+   planned openbox variant was not implemented.
 4. **Per-window dialogs/input** — per-window rendering for dialogs (filtered
    clients or the native client), pointer/keyboard routing, focus.
 5. **Embedded X server (target)** — replace the xpra/HTML5 surface with an
@@ -122,11 +140,13 @@ service), and per-window dialogs.
 
 ## Risks
 
-- openbox may not re-maximise on every screen change; the daemon re-applies
-  maximisation and logs the result.
+- The shipped `_fit_window` loop may miss the app window or fail to re-apply on
+  screen changes; it logs and retries every 0.5 s. The planned openbox variant
+  was not implemented.
 - The xpra HTML5 client's CSS/DPR interaction is the source of the former
   letterboxing; the viewport rewrite + physical width are load-bearing.
 - Multiple clients/windows per session require sharing and per-window filtering;
   dialogs inside the app window are the interim behavior.
-- A native client is a substantial protocol/render/input implementation; it is
-  staged after the WM route acceptance.
+- A native client or embedded X server is a substantial protocol/render/input
+  implementation; it is the target per ADR-001, not staged after the
+  unimplemented WM route.

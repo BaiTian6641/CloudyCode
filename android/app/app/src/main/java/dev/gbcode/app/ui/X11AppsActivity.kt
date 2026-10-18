@@ -43,7 +43,6 @@ class X11AppsActivity : Activity() {
     private var presetButtons: List<Button> = emptyList()
     private var probing = false
     private var watching = false
-    private val opened = mutableSetOf<Int>()
     private val openedSessions = mutableSetOf<Int>()
 
     private val watchRunnable = object : Runnable {
@@ -282,28 +281,6 @@ class X11AppsActivity : Activity() {
         conn.disconnect()
         if (code != 200) throw IllegalStateException("HTTP $code")
         return JSONObject(text)
-    }
-
-    private fun openWindow(o: JSONObject, proxy: Int) {
-        val id = o.optInt("id")
-        val title = o.optString("title", "Window")
-        val x = o.optInt("x", 0)
-        val y = o.optInt("y", 0)
-        val w = o.optInt("w", 800).coerceAtLeast(320)
-        val h = o.optInt("h", 600).coerceAtLeast(240)
-        val intent = Intent(this, X11Activity::class.java).apply {
-            putExtra("port", proxy)
-            putExtra("winId", id)
-            putExtra("winW", w)
-            putExtra("winH", h)
-            putExtra("name", title)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
-                Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-        }
-        val opts = ActivityOptions.makeBasic()
-            .setLaunchBounds(Rect(x, y, x + w, y + h)).toBundle()
-        startActivity(intent, opts)
     }
 
     private fun post(path: String, body: String): JSONObject {
