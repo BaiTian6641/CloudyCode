@@ -68,6 +68,17 @@ object X11Native {
     /** Release one per-window output; does not close the X client. */
     external fun unbindWindowSurface(output: Int)
 
+    /** Normalized pointer position in the bound output (0..1). */
+    external fun sendPointer(
+        output: Int, window: Int, x: Float, y: Float, button: Int, down: Boolean,
+    )
+
+    /** Send one Unicode code point to the focused X client. */
+    external fun sendText(output: Int, window: Int, codePoint: Int)
+
+    /** Send an X11 keycode press/release to the bound window. */
+    external fun sendKey(output: Int, window: Int, xKeyCode: Int, down: Boolean)
+
     /** XID of the first mapped application top-level window, or zero. */
     external fun firstWindow(): Int
 

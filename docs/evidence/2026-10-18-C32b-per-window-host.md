@@ -301,3 +301,25 @@ is not reachable from the app.
 - Firefox must be launched as `/usr/bin/firefox` until the updated setup's
   shell cleanup removes the old 14509 wrapper. The VM display path itself is
   healthy (`DISPLAY=:99`, xdpyinfo, 14500).
+
+
+## Free-form resize and host input
+
+- Screenshot diagnosis found the resize complaint was a restored legacy
+  `NativePreviewActivity` with no `window_id`/`output_id`: a black canvas that
+  no resize could affect. The Activity now finishes immediately when either
+  extra is missing; per-window hosts always carry both.
+- Valid host resize verified with task 1000061: 455x357 -> 1000x800. Logs:
+  `config ... 1000x800`, `surfaceChanged gen=1 frame=1000x735`,
+  `bindWindowSurface output=2 xid=0x20000a returned=true`, frames 1002x737.
+  The fixed-size xeyes content scales/crops; Firefox is the meaningful resize
+  test.
+- Pointer forwarding added through AIDL -> service handler -> JNI
+  `lorieOutputPointer`; tapping inside the enlarged host moved the xeyes pupils.
+  A tap on the window caption opened Android's App info menu, confirming that
+  tap was chrome, not X input.
+- Hardware key/text forwarding added via `lorieOutputKey`/`lorieOutputText`;
+  IME soft-keyboard and title/icon refresh remain.
+- Evidence: `/tmp/cloudy-x11-resize-before.png`,
+  `/tmp/cloudy-x11-after-resize.png`, `/tmp/cloudy-x11-pointer-before.png`,
+  `/tmp/cloudy-x11-pointer-after.png`.

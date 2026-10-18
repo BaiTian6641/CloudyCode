@@ -142,6 +142,54 @@ class NativeEngineService : Service(), X11Native.Callback {
             }
         }
 
+        override fun sendPointer(
+            output: Int,
+            window: Int,
+            x: Float,
+            y: Float,
+            button: Int,
+            down: Boolean,
+        ) {
+            val h = handler ?: return
+            if (!rendererConnected) return
+            h.post {
+                try {
+                    X11Native.sendPointer(output, window, x, y, button, down)
+                } catch (e: Throwable) {
+                    log("sendPointer threw ${e.javaClass.simpleName}: ${e.message}")
+                }
+            }
+        }
+
+        override fun sendText(output: Int, window: Int, codePoint: Int) {
+            val h = handler ?: return
+            if (!rendererConnected) return
+            h.post {
+                try {
+                    X11Native.sendText(output, window, codePoint)
+                } catch (e: Throwable) {
+                    log("sendText threw ${e.javaClass.simpleName}: ${e.message}")
+                }
+            }
+        }
+
+        override fun sendKey(
+            output: Int,
+            window: Int,
+            xKeyCode: Int,
+            down: Boolean,
+        ) {
+            val h = handler ?: return
+            if (!rendererConnected) return
+            h.post {
+                try {
+                    X11Native.sendKey(output, window, xKeyCode, down)
+                } catch (e: Throwable) {
+                    log("sendKey threw ${e.javaClass.simpleName}: ${e.message}")
+                }
+            }
+        }
+
         override fun unbindSurface() {
             val h = handler
             if (h == null || !started) {

@@ -16,4 +16,7 @@ interface ICloudyX11Engine {
     boolean bindWindowSurface(in Surface surface, int width, int height,
                               int output, int window);
     void unbindWindowSurface(int output);
+    void sendPointer(int output, int window, float x, float y, int button, boolean down);
+    void sendText(int output, int window, int codePoint);
+    void sendKey(int output, int window, int xKeyCode, boolean down);
 }

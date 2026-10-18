@@ -18,6 +18,8 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.WindowInsetsController
@@ -73,6 +75,13 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (windowId <= 0 || outputId <= 0) {
+            // A restored legacy/diagnostic task has no X window binding. Never
+            // present an unresizable black canvas for it.
+            Log.i(TAG, "invalid host extras window=$windowId output=$outputId; finish")
+            finishAndRemoveTask()
+            return
+        }
         setTitle(windowTitle)
         setTaskDescription(ActivityManager.TaskDescription(windowTitle))
         window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
@@ -89,6 +98,9 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
         )
 
         surfaceView = SurfaceView(this).apply {
+            isFocusable = true
+            isFocusableInTouchMode = true
+            isClickable = true
             setBackgroundColor(Color.BLACK)
             // A normal SurfaceView is placed behind the Activity window; the
             // opaque black window would hide every engine frame. Put this
@@ -97,6 +109,7 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
             holder.addCallback(this@NativePreviewActivity)
             holder.setFormat(PixelFormat.RGBA_8888)
         }
+        surfaceView.setOnTouchListener { _, event -> handlePointer(event) }
         setContentView(surfaceView)
         log("create task=$taskId ${bounds()}")
         window.decorView.post { log("laidOut task=$taskId ${bounds()}") }
@@ -133,7 +146,75 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
         acceptedGeneration = -1
         bindWindowStarted = SystemClock.uptimeMillis()
         log("surfaceCreated gen=$surfaceGeneration valid=${holder.surface.isValid} ${bounds()}")
+        surfaceView.requestFocus()
         scheduleBind(0)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyTaskTitle()
+        surfaceView.requestFocus()
+    }
+
+    private fun applyTaskTitle() {
+        setTitle(windowTitle)
+        setTaskDescription(ActivityManager.TaskDescription(windowTitle))
+        window.decorView.post {
+            setTitle(windowTitle)
+            setTaskDescription(ActivityManager.TaskDescription(windowTitle))
+        }
+    }
+
+    private fun handlePointer(event: MotionEvent): Boolean {
+        val iface = engine ?: return false
+        if (windowId <= 0 || outputId <= 0) return false
+        val width = surfaceView.width.toFloat()
+        val height = surfaceView.height.toFloat()
+        if (width <= 0f || height <= 0f) return false
+        val x = (event.x / width).coerceIn(0f, 1f)
+        val y = (event.y / height).coerceIn(0f, 1f)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                iface.sendPointer(outputId, windowId, x, y, 1, true)
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                iface.sendPointer(outputId, windowId, x, y, 0, false)
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP,
+            MotionEvent.ACTION_CANCEL -> {
+                iface.sendPointer(outputId, windowId, x, y, 1, false)
+                return true
+            }
+        }
+        return false
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val iface = engine
+        if (iface != null && windowId > 0 && outputId > 0) {
+            val xKey = specialKeys[event.keyCode]
+            if (xKey != null) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    iface.sendKey(outputId, windowId, xKey, true)
+                } else if (event.action == KeyEvent.ACTION_UP) {
+                    iface.sendKey(outputId, windowId, xKey, false)
+                }
+                return true
+            }
+            if (event.action == KeyEvent.ACTION_DOWN &&
+                !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed) {
+                val codePoint = event.unicodeChar
+                if (codePoint != 0) {
+                    iface.sendText(outputId, windowId, codePoint)
+                    return true
+                }
+            } else if (event.action == KeyEvent.ACTION_UP && event.unicodeChar != 0) {
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -277,6 +358,28 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
     }
 
     companion object {
+        private val specialKeys = mapOf(
+            KeyEvent.KEYCODE_ENTER to 36,
+            KeyEvent.KEYCODE_DEL to 22,
+            KeyEvent.KEYCODE_TAB to 23,
+            KeyEvent.KEYCODE_ESCAPE to 9,
+            KeyEvent.KEYCODE_DPAD_LEFT to 113,
+            KeyEvent.KEYCODE_DPAD_RIGHT to 114,
+            KeyEvent.KEYCODE_DPAD_UP to 111,
+            KeyEvent.KEYCODE_DPAD_DOWN to 116,
+            KeyEvent.KEYCODE_MOVE_HOME to 110,
+            KeyEvent.KEYCODE_MOVE_END to 115,
+            KeyEvent.KEYCODE_PAGE_UP to 112,
+            KeyEvent.KEYCODE_PAGE_DOWN to 117,
+            KeyEvent.KEYCODE_FORWARD_DEL to 119,
+            KeyEvent.KEYCODE_SPACE to 65,
+            KeyEvent.KEYCODE_SHIFT_LEFT to 50,
+            KeyEvent.KEYCODE_SHIFT_RIGHT to 62,
+            KeyEvent.KEYCODE_CTRL_LEFT to 37,
+            KeyEvent.KEYCODE_CTRL_RIGHT to 105,
+            KeyEvent.KEYCODE_ALT_LEFT to 64,
+            KeyEvent.KEYCODE_ALT_RIGHT to 108,
+        )
         private const val TAG = "CloudyX11Preview"
         private const val TITLE = "Cloudy X11 native preview"
         private const val BIND_RETRY_MS = 750L

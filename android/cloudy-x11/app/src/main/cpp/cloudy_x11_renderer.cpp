@@ -616,6 +616,52 @@ Java_dev_cloudy_x11_native_X11Native_unbindWindowSurface(
     LOGI("unbind window output=%d", output);
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_dev_cloudy_x11_native_X11Native_sendPointer(
+        JNIEnv*, jobject, jint output, jint windowId, jfloat x, jfloat y,
+        jint button, jboolean down) {
+    if (!g_connection || g_disconnected || output <= 0 || windowId <= 0)
+        return;
+    auto it = g_output_windows.find(static_cast<uint32_t>(output));
+    if (it == g_output_windows.end() ||
+        it->second != static_cast<uint32_t>(windowId))
+        return;
+    lorieOutputPointer(g_connection, static_cast<uint32_t>(output),
+                       static_cast<uint32_t>(windowId), x, y,
+                       static_cast<uint16_t>(button), down);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_cloudy_x11_native_X11Native_sendText(
+        JNIEnv*, jobject, jint output, jint windowId, jint codePoint) {
+    if (!g_connection || g_disconnected || output <= 0 || windowId <= 0 ||
+        codePoint < 0)
+        return;
+    auto it = g_output_windows.find(static_cast<uint32_t>(output));
+    if (it == g_output_windows.end() ||
+        it->second != static_cast<uint32_t>(windowId))
+        return;
+    lorieOutputText(g_connection, static_cast<uint32_t>(output),
+                    static_cast<uint32_t>(windowId),
+                    static_cast<uint32_t>(codePoint));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_cloudy_x11_native_X11Native_sendKey(
+        JNIEnv*, jobject, jint output, jint windowId, jint xKeyCode,
+        jboolean down) {
+    if (!g_connection || g_disconnected || output <= 0 || windowId <= 0 ||
+        xKeyCode <= 0)
+        return;
+    auto it = g_output_windows.find(static_cast<uint32_t>(output));
+    if (it == g_output_windows.end() ||
+        it->second != static_cast<uint32_t>(windowId))
+        return;
+    lorieOutputKey(g_connection, static_cast<uint32_t>(output),
+                   static_cast<uint32_t>(windowId),
+                   static_cast<uint16_t>(xKeyCode), down);
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_dev_cloudy_x11_native_X11Native_bindSurface(
         JNIEnv* env, jobject, jobject surface, jint width, jint height) {
