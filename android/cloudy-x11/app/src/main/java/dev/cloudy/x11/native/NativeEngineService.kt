@@ -5,7 +5,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Rect
 import android.os.Handler
 import android.os.HandlerThread
@@ -39,6 +42,15 @@ class NativeEngineService : Service(), X11Native.Callback {
     @Volatile private var windowKnown = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private val windowHosts = mutableMapOf<Int, Int>()
+    private val hostClosedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val id = intent.getIntExtra(EXTRA_WINDOW_ID, 0)
+            if (id > 0) {
+                val removed = windowHosts.remove(id)
+                log("host closed xid=0x${Integer.toHexString(id)} output=$removed")
+            }
+        }
+    }
     // Output 1 is reserved for the legacy diagnostic preview. Per-window
     // hosts start at 2 so a preview can never collide with a real XID output.
     private var nextOutput = 2
@@ -167,6 +179,11 @@ class NativeEngineService : Service(), X11Native.Callback {
         super.onCreate()
         log("service create pid=${android.os.Process.myPid()} uid=${android.os.Process.myUid()}")
         createChannel()
+        registerReceiver(
+            hostClosedReceiver,
+            IntentFilter(ACTION_HOST_CLOSED),
+            Context.RECEIVER_NOT_EXPORTED,
+        )
         try {
             startForeground(NOTIFICATION_ID, notification())
             log("foreground notification active")
@@ -372,7 +389,20 @@ class NativeEngineService : Service(), X11Native.Callback {
         height: Int,
         mapped: Boolean,
     ) {
-        if (!mapped || parent != 0 || id <= 0 || width <= 0 || height <= 0) return
+        if (id <= 0) return
+        if (!mapped) {
+            mainHandler.post {
+                val output = windowHosts.remove(id) ?: return@post
+                log("window unmapped xid=0x${Integer.toHexString(id)} output=$output")
+                sendBroadcast(
+                    Intent(ACTION_WINDOW_CLOSED)
+                        .setPackage(packageName)
+                        .putExtra(EXTRA_WINDOW_ID, id),
+                )
+            }
+            return
+        }
+        if (parent != 0 || width <= 0 || height <= 0) return
         // LORIE_WINDOW_APPLICATION=0, LORIE_WINDOW_UNCLASSIFIED=2.
         if (role != 0 && role != 2) return
         mainHandler.post {
@@ -431,6 +461,10 @@ class NativeEngineService : Service(), X11Native.Callback {
 
     override fun onDestroy() {
         log("service destroy")
+        try {
+            unregisterReceiver(hostClosedReceiver)
+        } catch (_: Exception) {
+        }
         rendererConnected = false
         windowKnown = false
         tunnel?.close()
@@ -529,5 +563,8 @@ class NativeEngineService : Service(), X11Native.Callback {
         private const val CHANNEL_ID = "cloudy-x11-engine"
         private const val NOTIFICATION_ID = 42
         const val ACTION_ENGINE_STATE = "dev.cloudy.x11.ENGINE_STATE"
+        const val ACTION_WINDOW_CLOSED = "dev.cloudy.x11.WINDOW_CLOSED"
+        const val ACTION_HOST_CLOSED = "dev.cloudy.x11.HOST_CLOSED"
+        const val EXTRA_WINDOW_ID = "window_id"
     }
 }

@@ -557,6 +557,16 @@ export DISPLAY=$DISPLAY
 export XAUTHORITY=$XAUTH
 EOF
   fi
+  if ! grep -q 'CLOUDY_X11_NATIVE_LAUNCHERS' "$rc.cloudy.tmp"; then
+    cat >> "$rc.cloudy.tmp" <<'EOF'
+# CLOUDY_X11_NATIVE_LAUNCHERS
+if [ -n "$BASH_VERSION" ]; then
+  unalias firefox cloudy-firefox cloudy-run 2>/dev/null || true
+  unset -f firefox cloudy-firefox cloudy-run 2>/dev/null || true
+  alias firefox=/usr/bin/firefox 2>/dev/null || true
+fi
+EOF
+  fi
   mv "$rc.cloudy.tmp" "$rc"
 done
 if [ "$SYSTEM" = 1 ]; then

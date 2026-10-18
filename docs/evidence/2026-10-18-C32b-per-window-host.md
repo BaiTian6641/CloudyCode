@@ -270,3 +270,16 @@ is not reachable from the app.
 - Remaining cosmetic/behavior work for C3.3: the free-form caption still shows
   the app label rather than the X window title, and input/resize/close/dialogs
   are not yet wired.
+
+
+## Window close/reopen and Firefox wrapper
+
+- `onNativeWindow(mapped=false)` now removes the XID/output mapping and
+  broadcasts `WINDOW_CLOSED`; the host Activity finishes and removes its task.
+  A host closed by the user broadcasts `HOST_CLOSED`, which also clears the map.
+  This fixes the black stale window and lets a reused XID be hosted again.
+- Firefox's curl to `127.0.0.1:14509` is the retired prototype GUI wrapper, not
+  `/usr/bin/firefox` (`firefox_head` showed the normal firefox-esr wrapper).
+  Setup now appends a shell cleanup that removes old `firefox`, `cloudy-firefox`
+  and `cloudy-run` aliases/functions and aliases firefox to `/usr/bin/firefox`.
+  Immediate workaround: run `/usr/bin/firefox` in Terminal (DISPLAY=:99).

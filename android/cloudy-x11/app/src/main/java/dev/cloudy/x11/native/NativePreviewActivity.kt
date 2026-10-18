@@ -2,9 +2,11 @@ package dev.cloudy.x11.native
 
 import android.app.Activity
 import android.app.ActivityManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.res.Configuration
 import android.graphics.Color
@@ -42,6 +44,15 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
     private val outputId by lazy { intent.getIntExtra("output_id", 0) }
     private val windowTitle by lazy {
         intent.getStringExtra("window_title") ?: TITLE
+    }
+    private val windowClosed = object : BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) {
+            if (intent.getIntExtra(
+                    NativeEngineService.EXTRA_WINDOW_ID, 0) == windowId) {
+                log("window closed by engine xid=0x${Integer.toHexString(windowId)}")
+                finishAndRemoveTask()
+            }
+        }
     }
 
     private val connection = object : ServiceConnection {
@@ -89,6 +100,13 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
         setContentView(surfaceView)
         log("create task=$taskId ${bounds()}")
         window.decorView.post { log("laidOut task=$taskId ${bounds()}") }
+        if (windowId > 0) {
+            registerReceiver(
+                windowClosed,
+                IntentFilter(NativeEngineService.ACTION_WINDOW_CLOSED),
+                android.content.Context.RECEIVER_NOT_EXPORTED,
+            )
+        }
 
         val start = Intent(this, NativeEngineService::class.java).putExtra("action", "start")
         try {
@@ -217,6 +235,17 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
     override fun onDestroy() {
         log("destroy task=$taskId finishing=$isFinishing " +
             "configChange=$isChangingConfigurations gen=$surfaceGeneration")
+        try {
+            unregisterReceiver(windowClosed)
+        } catch (_: Exception) {
+        }
+        if (windowId > 0 && !isChangingConfigurations) {
+            sendBroadcast(
+                Intent(NativeEngineService.ACTION_HOST_CLOSED)
+                    .setPackage(packageName)
+                    .putExtra(NativeEngineService.EXTRA_WINDOW_ID, windowId),
+            )
+        }
         stopRetries()
         main.removeCallbacksAndMessages(null)
         if (surfaceAlive) unbindFromEngine()
