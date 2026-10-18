@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Cloudy X11 forwarding: xpra on guest loopback plus a token-authenticated
-# proxy on port 14500. The app sets the token cookie and verifies an HMAC
-# before loading anything. X clients use DISPLAY=:100.
+# Cloudy-X11 VM setup v2 (2026-10-18).
+# Native target: persistent display proxy :99 -> Unix tunnel -> 14500 bridge.
+# Install this once to ~/.local/share/cloudy/cloudy-x11-setup.sh. The legacy
+# xpra HTML5 carrier remains installable here but is not the target path.
 set -euo pipefail
 
 TOKEN=""
@@ -13,7 +14,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$TOKEN" ] || { echo "usage: cloudy-x11-setup.sh --token <token>" >&2; exit 2; }
 
-echo "== Cloudy X11 setup (xpra + token proxy) =="
+echo "== Cloudy-X11 VM setup v2 (native :99 + tunnel) =="
 BASE="$HOME/.local/share/cloudy"
 mkdir -p "$BASE" "$HOME/.config/systemd/user"
 (umask 077; printf '%s' "$TOKEN" > "$BASE/x11-token")

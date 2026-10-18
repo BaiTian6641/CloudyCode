@@ -186,3 +186,23 @@ engine starts automatically on resume and remains waiting; the native engine
 logs show `native ready :99`, `renderer connected`, `windows committed`. The VM
 X11 window is expected to arrive from an ordinary Terminal launch; the app does
 not require an in-app app picker.
+
+
+## Detailed live check (2026-10-18)
+
+- Installed Terminal package resolves to
+  `com.android.virtualization.terminal/.new2.ui.MainActivity`; the previously
+  installed APK lacked `<queries>`, so `getLaunchIntentForPackage` could return
+  null. The current manifest has the package query and an explicit MainActivity
+  fallback.
+- The installed setup asset is v2 and writes to
+  `~/.local/share/cloudy/cloudy-x11-setup.sh`, removing the old
+  `~/cloudy-x11-setup.sh`. The embedded VM unit is the Unix-socket/cookie form.
+- A raw `/x11-tunnel` probe on 14500 timed out. That means the current live
+  14500 bridge is still the old/legacy path and/or the VM private :99 proxy is
+  not running. The app engine therefore cannot get a config; `xeyes` correctly
+  reports `Can't open display :99` because no process owns the VM X99 socket.
+- Opening the Cloudy-X11 app only starts the Android engine. It cannot start the
+  VM-side proxy; that is the one-time VM setup's job.
+- The app now receives engine state broadcasts: `ready` or
+  `VM display not ready. Run Set up X11 once.` instead of silently pretending.

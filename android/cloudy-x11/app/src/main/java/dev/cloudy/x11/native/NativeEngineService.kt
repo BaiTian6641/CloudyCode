@@ -260,6 +260,7 @@ class NativeEngineService : Service(), X11Native.Callback {
                 }
                 connected.startReader {
                     log("tunnel reader ended")
+                    notifyState("error", "VM display disconnected. Reopen Cloudy X11.")
                     handler?.post {
                         log("stopping engine after tunnel loss")
                         stopEngine()
@@ -425,6 +426,15 @@ class NativeEngineService : Service(), X11Native.Callback {
         file.setWritable(true, true)
     }
 
+    private fun notifyState(state: String, message: String) {
+        try {
+            sendBroadcast(Intent(ACTION_ENGINE_STATE).setPackage(packageName)
+                .putExtra("state", state).putExtra("message", message))
+        } catch (e: Exception) {
+            log("state broadcast failed: ${e.message}")
+        }
+    }
+
     private fun log(line: String) {
         Log.i(TAG, line)
         try {
@@ -437,5 +447,6 @@ class NativeEngineService : Service(), X11Native.Callback {
         private const val TAG = "CloudyX11Native"
         private const val CHANNEL_ID = "cloudy-x11-engine"
         private const val NOTIFICATION_ID = 42
+        const val ACTION_ENGINE_STATE = "dev.cloudy.x11.ENGINE_STATE"
     }
 }

@@ -371,28 +371,32 @@ class X11Activity : Activity() {
 
     private fun copySetupCommand() {
         val script = assets.open("cloudy-x11-setup.sh").bufferedReader().use { it.readText() }
-        val command = "cat > ~/cloudy-x11-setup.sh <<'CLOUDY_X11_EOF'\n$script\nCLOUDY_X11_EOF\n" +
-            "bash ~/cloudy-x11-setup.sh --token $token"
+        val dir = "~/.local/share/cloudy"
+        val setupPath = "$dir/cloudy-x11-setup.sh"
+        val command = "rm -f ~/cloudy-x11-setup.sh\n" +
+            "mkdir -p $dir\n" +
+            "cat > $setupPath <<'CLOUDY_X11_EOF'\n$script\nCLOUDY_X11_EOF\n" +
+            "bash $setupPath --token $token"
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("Cloudy X11 setup", command)
         clip.description.extras = android.os.PersistableBundle().apply {
             putBoolean("android.content.extra.IS_SENSITIVE", true)
         }
         clipboard.setPrimaryClip(clip)
-        detail.text = "Setup command copied. Paste it into Terminal and press Enter. " +
-            "This one-time setup installs the display service."
+        detail.text = "Setup v2 command copied. Paste it into Terminal and press Enter. " +
+            "This one-time setup installs the persistent display service."
     }
 
     private fun openTerminal() {
-        val launch = packageManager.getLaunchIntentForPackage("com.android.virtualization.terminal")
-        if (launch == null) {
-            detail.text = "The Googlebook Terminal app is not installed."
-            return
-        }
+        val pkg = "com.android.virtualization.terminal"
+        val launch = packageManager.getLaunchIntentForPackage(pkg)
+            ?: Intent().setComponent(android.content.ComponentName(
+                pkg, "$pkg.new2.ui.MainActivity"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             startActivity(launch)
         } catch (e: Exception) {
-            detail.text = "Could not open the Terminal app: ${e.message}"
+            detail.text = "Could not open Terminal. Launch it from the dock."
         }
     }
 

@@ -80,4 +80,7 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density" />
     </application>
 
+    <queries>
+        <package android:name="com.android.virtualization.terminal" />
+    </queries>
 </manifest>

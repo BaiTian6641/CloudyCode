@@ -3,7 +3,11 @@ package dev.cloudy.x11.ui
 import android.app.Activity
 import android.app.ActivityOptions
 import android.app.AlertDialog
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
@@ -59,6 +63,12 @@ class X11AppsActivity : Activity() {
     private var watching = false
     private var overlayPrompted = false
     private val openedSessions = mutableSetOf<Int>()
+    private val engineState = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val message = intent.getStringExtra("message") ?: return
+            status.text = message
+        }
+    }
 
     private val watchRunnable = object : Runnable {
         override fun run() {
@@ -183,12 +193,19 @@ class X11AppsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (nativeProbe) return
+        registerReceiver(engineState,
+            IntentFilter(dev.cloudy.x11.native.NativeEngineService.ACTION_ENGINE_STATE),
+            Context.RECEIVER_NOT_EXPORTED)
         startNativeEngine()
         maybeRequestOverlayPermission()
-        status.text = "X11 display is starting. Open an X11 app from Terminal."
+        status.text = "Starting X11 display…"
     }
 
     override fun onPause() {
+        try {
+            unregisterReceiver(engineState)
+        } catch (_: Exception) {
+        }
         watching = false
         handler.removeCallbacks(watchRunnable)
         super.onPause()
@@ -243,16 +260,15 @@ class X11AppsActivity : Activity() {
         (value * resources.displayMetrics.density).toInt()
 
     private fun openTerminal() {
-        val launch = packageManager.getLaunchIntentForPackage(
-            "com.android.virtualization.terminal")
-        if (launch == null) {
-            status.text = "The Linux Terminal app is not installed."
-            return
-        }
+        val pkg = "com.android.virtualization.terminal"
+        val launch = packageManager.getLaunchIntentForPackage(pkg)
+            ?: Intent().setComponent(ComponentName(
+                pkg, "$pkg.new2.ui.MainActivity"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             startActivity(launch)
         } catch (e: Exception) {
-            status.text = "Could not open Terminal: ${e.message}"
+            status.text = "Could not open Terminal. Launch it from the dock."
         }
     }
 
