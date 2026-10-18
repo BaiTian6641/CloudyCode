@@ -1,13 +1,16 @@
 package dev.cloudy.x11.native
 
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import dev.cloudy.x11.R
@@ -33,6 +36,9 @@ class NativeEngineService : Service(), X11Native.Callback {
     private var readyLatch = CountDownLatch(1)
     @Volatile private var rendererConnected = false
     @Volatile private var windowKnown = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val windowHosts = mutableMapOf<Int, Int>()
+    private var nextOutput = 1
 
     /**
      * Surface IPC from the host process. Native calls are always posted to the
@@ -82,6 +88,43 @@ class NativeEngineService : Service(), X11Native.Callback {
                     "known=${windowKnown} returned=$ok")
             }
             return true
+        }
+
+        override fun bindWindowSurface(
+            surface: Surface?,
+            width: Int,
+            height: Int,
+            output: Int,
+            window: Int,
+        ): Boolean {
+            if (surface == null || width <= 0 || height <= 0 ||
+                output <= 0 || window <= 0) return false
+            if (!rendererConnected) {
+                log("bindWindowSurface deferred: renderer not connected")
+                return false
+            }
+            val h = handler ?: return false
+            h.post {
+                try {
+                    val ok = X11Native.bindWindowSurface(
+                        surface, width, height, output, window)
+                    log("bindWindowSurface output=$output xid=0x" +
+                        Integer.toHexString(window) + " returned=$ok")
+                } catch (e: Throwable) {
+                    log("bindWindowSurface threw ${e.javaClass.simpleName}: ${e.message}")
+                }
+            }
+            return true
+        }
+
+        override fun unbindWindowSurface(output: Int) {
+            handler?.post {
+                try {
+                    X11Native.unbindWindowSurface(output)
+                } catch (e: Throwable) {
+                    log("unbindWindowSurface threw ${e.javaClass.simpleName}: ${e.message}")
+                }
+            }
         }
 
         override fun unbindSurface() {

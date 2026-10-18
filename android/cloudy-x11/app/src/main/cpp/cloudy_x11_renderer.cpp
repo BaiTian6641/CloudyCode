@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <map>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -22,6 +23,8 @@
 #include <utility>
 
 #include "embedded.h"
+
+extern "C" void cloudy_x11_window_event(uint32_t id, const LorieWindowInfo* info);
 
 #define LOG_TAG "CloudyX11Renderer"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -456,6 +459,7 @@ const LorieGraphics kGraphics = {
 
 LorieConnection* g_connection = nullptr;
 std::atomic<uint32_t> g_first_window{0};
+std::map<uint32_t, uint32_t> g_output_windows;
 uint32_t g_bound_output = 0;
 bool g_disconnected = false;
 
@@ -473,6 +477,7 @@ void onDisconnected(void*) {
 }
 
 void onWindow(void*, uint32_t id, const LorieWindowInfo* info) {
+    cloudy_x11_window_event(id, info);
     if (!info || !info->mapped || g_first_window.load()) return;
     // The first mapped application top-level becomes the initial output content.
     // Transients, dialogs and splash windows keep their own host policy later.
@@ -536,6 +541,7 @@ Java_dev_cloudy_x11_native_X11Native_connectRenderer(JNIEnv*, jobject) {
         g_bound_output = 0;
         g_first_window.store(0);
         g_disconnected = false;
+        g_output_windows.clear();
     }
     int descriptor = lorieServerConnect();
     if (descriptor < 0) {
@@ -560,6 +566,54 @@ Java_dev_cloudy_x11_native_X11Native_connectRenderer(JNIEnv*, jobject) {
     lorieObserveWindows(connection);
     LOGI("renderer connected");
     return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_dev_cloudy_x11_native_X11Native_bindWindowSurface(
+        JNIEnv* env, jobject, jobject surface, jint width, jint height,
+        jint output, jint windowId) {
+    if (!g_connection || g_disconnected || output <= 0 || windowId <= 0)
+        return JNI_FALSE;
+    auto existing = g_output_windows.find(static_cast<uint32_t>(output));
+    if (existing != g_output_windows.end()) {
+        lorieConnectionSurface(g_connection, static_cast<uint32_t>(output),
+                               nullptr, true);
+        lorieOutputRelease(g_connection, static_cast<uint32_t>(output),
+                           existing->second);
+        g_output_windows.erase(existing);
+    }
+    if (!surface) return JNI_TRUE;
+    ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
+    if (!window) return JNI_FALSE;
+    bool bound = lorieConnectionSurface(g_connection,
+        static_cast<uint32_t>(output), window, false);
+    if (bound) {
+        lorieOutputBind(g_connection, static_cast<uint32_t>(output),
+                        static_cast<uint32_t>(windowId));
+        if (width > 0 && height > 0)
+            lorieOutputResize(g_connection, static_cast<uint32_t>(output),
+                              static_cast<uint32_t>(windowId),
+                              static_cast<int>(width), static_cast<int>(height));
+        g_output_windows[static_cast<uint32_t>(output)] =
+            static_cast<uint32_t>(windowId);
+    }
+    ANativeWindow_release(window);
+    LOGI("bind window output=%d xid=0x%x size=%dx%d bound=%d",
+         output, windowId, width, height, bound ? 1 : 0);
+    return bound ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_cloudy_x11_native_X11Native_unbindWindowSurface(
+        JNIEnv*, jobject, jint output) {
+    if (!g_connection || output <= 0) return;
+    auto it = g_output_windows.find(static_cast<uint32_t>(output));
+    if (it == g_output_windows.end()) return;
+    lorieConnectionSurface(g_connection, static_cast<uint32_t>(output),
+                           nullptr, true);
+    lorieOutputRelease(g_connection, static_cast<uint32_t>(output), it->second);
+    g_output_windows.erase(it);
+    LOGI("unbind window output=%d", output);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

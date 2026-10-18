@@ -1,6 +1,7 @@
 package dev.cloudy.x11.native
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -37,6 +38,11 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
     private var acceptedGeneration = -1
     private var bindWindowStarted = 0L
     private var retry: Runnable? = null
+    private val windowId by lazy { intent.getIntExtra("window_id", 0) }
+    private val outputId by lazy { intent.getIntExtra("output_id", 0) }
+    private val windowTitle by lazy {
+        intent.getStringExtra("window_title") ?: TITLE
+    }
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -56,7 +62,8 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setTitle(TITLE)
+        setTitle(windowTitle)
+        setTaskDescription(ActivityManager.TaskDescription(windowTitle))
         window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
         window.decorView.setBackgroundColor(Color.BLACK)
         window.statusBarColor = Color.BLACK
@@ -155,7 +162,11 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
             return
         }
         val accepted = try {
-            iface.bindSurface(surface, width, height)
+            if (windowId > 0 && outputId > 0) {
+                iface.bindWindowSurface(surface, width, height, outputId, windowId)
+            } else {
+                iface.bindSurface(surface, width, height)
+            }
         } catch (e: Throwable) {
             log("bind gen=$generation threw ${e.javaClass.simpleName}: ${e.message}")
             false
@@ -186,8 +197,12 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
     private fun unbindFromEngine() {
         val iface = engine ?: return
         try {
-            iface.unbindSurface()
-            log("unbind gen=$surfaceGeneration")
+            if (windowId > 0 && outputId > 0) {
+                iface.unbindWindowSurface(outputId)
+            } else {
+                iface.unbindSurface()
+            }
+            log("unbind gen=$surfaceGeneration window=$windowId")
         } catch (e: Throwable) {
             log("unbind gen=$surfaceGeneration threw ${e.javaClass.simpleName}: ${e.message}")
         }

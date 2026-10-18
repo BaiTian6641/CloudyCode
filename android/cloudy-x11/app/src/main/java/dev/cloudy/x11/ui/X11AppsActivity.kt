@@ -97,6 +97,15 @@ class X11AppsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildUi())
+        if (intent.getBooleanExtra("per_window", false)) {
+            try {
+                startForegroundService(Intent(this,
+                    dev.cloudy.x11.native.NativeEngineService::class.java)
+                    .putExtra("action", "start"))
+            } catch (e: Exception) {
+                Log.w(TAG, "per-window engine start failed: ${e.message}")
+            }
+        }
         if (intent.getBooleanExtra("native_preview", false)) {
             startActivity(Intent(this, dev.cloudy.x11.native.NativePreviewActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

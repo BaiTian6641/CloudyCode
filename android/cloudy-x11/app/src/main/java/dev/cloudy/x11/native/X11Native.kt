@@ -12,6 +12,15 @@ object X11Native {
 
     interface Callback {
         fun onNativeReady(display: String)
+        fun onNativeWindow(
+            id: Int,
+            title: String?,
+            role: Int,
+            parent: Int,
+            width: Int,
+            height: Int,
+            mapped: Boolean,
+        ) {}
     }
 
     external fun start(
@@ -46,6 +55,18 @@ object X11Native {
 
     /** Detach presentation while retaining the X output and client. */
     external fun unbindSurface()
+
+    /** Bind one X top-level to its own nonzero output/Surface. */
+    external fun bindWindowSurface(
+        surface: android.view.Surface?,
+        width: Int,
+        height: Int,
+        output: Int,
+        window: Int,
+    ): Boolean
+
+    /** Release one per-window output; does not close the X client. */
+    external fun unbindWindowSurface(output: Int)
 
     /** XID of the first mapped application top-level window, or zero. */
     external fun firstWindow(): Int

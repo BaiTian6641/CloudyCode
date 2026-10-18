@@ -13,4 +13,7 @@ import android.view.Surface;
 interface ICloudyX11Engine {
     boolean bindSurface(in Surface surface, int width, int height);
     void unbindSurface();
+    boolean bindWindowSurface(in Surface surface, int width, int height,
+                              int output, int window);
+    void unbindWindowSurface(int output);
 }

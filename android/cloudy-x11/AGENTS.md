@@ -28,8 +28,10 @@ after context compaction or session recovery. The long-form design is
 - Do not disable X11 auth (`-ac`) in production; the app engine gets the
   Xauthority cookie only over the authenticated tunnel.
 - Current phase: C3.2b per-X-window hosts. C3.2a CPU graphics/Surface and VM
-  `xeyes` pixels are verified; the current `NativePreviewActivity` is a
-  single-XID diagnostic, not the product. G2 background launch remains unproven.
+  `xeyes` pixels are verified; per-window callbacks/binding exist but are not
+  device-verified. The current preview is a diagnostic host, not the product.
+  G2 background launch remains unproven; the VM forward can disappear when
+  Terminal is covered (502), and no VM client can be synthesized on Android.
   Read `ENGINE-AUDIT.md` before JNI/renderer changes.
 - VM lifecycle: the Terminal VM/port forward can disappear when Terminal is
   hidden or the device reboots. Do not claim window-independent VM lifetime;

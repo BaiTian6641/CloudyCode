@@ -98,10 +98,12 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
   first known pixels, and a VM `xeyes` client rendered in a real Surface
   (`present lock=0/post=0`; evidence screenshot). Diagnostic single-XID preview,
   not per-window.
-- [ ] **C3.2b** Per-X-window host: one independent task per normal top-level,
-  XID+incarnation registry, role policy (dialogs/popups/splash/root), two
-  concurrent applications, metadata/caption. Native tunnel lost on VM stop must
-  recover by restarting the engine session.
+- [ ] **C3.2b** Per-X-window host: native window callbacks + distinct
+  output/Surface + one task per mapped parentless application are implemented
+  and build-verified. Device test blocked: the VM/forwarder disappeared (502)
+  when Terminal was covered; task launch/G2 background restrictions untested.
+  XID+incarnation registry, role policy, window removal/close and two-window
+  proof remain.
 - [ ] **C3.3** Real resize/input/IME/close, dialogs/multi-window, Surface
   replacement/recreation, colored/alpha pixel fixture.
 - [x] **16 KB gate** every native artifact: ELF LOAD `0x4000`, APK
@@ -152,6 +154,7 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C5.
 | 2026-10-18 | `b363fdd` | G1 native APK-UID binary transport probe passed 25 checks. |
 | 2026-10-18 | pending | C3.1 VM `xdpyinfo` through APK into embedded X.Org 21.1.99; 16 KB JNI/APK verified. |
 | 2026-10-18 | pending | C3.2 first VM xeyes pixels in native Surface; review hardening/XKB; per-window host next. |
+| 2026-10-18 | pending | C3.2b per-window host code/build; clean XKB extraction; HMAC bridge reached 502 because VM/forwarder stopped. |
 | 2026-10-18 | pending | G2 visible tasks/title/bounds verified; background launch remains unproven. |
 
 ## Context recovery
