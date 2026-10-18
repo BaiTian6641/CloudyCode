@@ -287,8 +287,12 @@ or adapt.
   `upstream/engine.lock.json`); start the native smoke host and one renderer.
 - Create one Android host Surface and paint one forwarded X client; prove no
   WebView/letterboxing.
-- Gate: `xeyes`/`xterm` from a test socket is visible in one Googlebook task and
-  the caption shows the X title.
+- Gate X1a (engine start): **passed on the Googlebook** under the app UID
+  (`run-as dev.gbcode.app`): `native X11 ready :0`, exit 0, with XKB staged in
+  app data. The adb-shell UID is denied `sock_file` creation by SELinux, so the
+  host must run in the app UID. Gate X1b: renderer/per-window Surface and one
+  forwarded client visible in a Googlebook task with the X title in the
+  caption.
 
 ### X2 — VM transport and Terminal routing
 
@@ -395,8 +399,9 @@ or adapt.
 host and VM forwarding proxy. Consequences: the combined app becomes GPLv3; the
 current xpra WM route remains an interim demo; the permissive clean-room and
 per-app streaming paths are not selected. See
-[ADR-001](../decisions/ADR-001-embedded-x11.md). The X1 non-UI build gate is
-passed; the on-device smoke gate is next.
+[ADR-001](../decisions/ADR-001-embedded-x11.md). The X1a build/engine-start
+gate passed on the Googlebook; X1b (renderer/host) and X2 (VM transport) are
+next.
 
 ## References
 

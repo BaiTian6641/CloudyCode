@@ -77,7 +77,12 @@ release.
 
 - X1: build `LorieNative`/`lorie-smoke` and pin the engine commit; record the
   license notice and NDK version. **Done:** engine `65c3ced0`, NDK
-  `27.3.13750724`, `lorie-smoke` linked (20 MB); on-device smoke pending.
+  `27.3.13750724`, `lorie-smoke` linked (20 MB). **Passed on the Googlebook:**
+  run under the app UID (`run-as dev.gbcode.app`) with XKB staged in app data,
+  it printed `native X11 ready :0` and exited 0. Execution from the adb-shell
+  UID is blocked by SELinux (`sock_file` create denied), so the product host
+  must run in the app UID as planned. The renderer/per-window Surface is X1b,
+  still pending.
 - X2: VM forwarding proxy + `lorieServerAcceptClient`; two independent windows.
 - X3: Android host (Surface, input, resize, close, dialogs).
 - X4: make the forwarding display the shell default; retire the xpra display
