@@ -6,7 +6,7 @@ Status: draft; C5 acceptance is not complete.
 
 - [x] Live VM display proxy (14500 Unix/cookie tunnel) reaches the embedded engine; target-only setup.
 - [x] xeyes and Firefox open free-form tasks; three simultaneous xeyes hosts verified.
-  - [ ] xterm/representative toolkit and Cloudy Code launched GUI app.
+  - [x] xterm with Fontconfig Monospace and Firefox GTK; Cloudy Code environment.
 - [x] Close/reopen, resize, pointer and hardware text verified.
   - [ ] True transient dialog and soft IME.
 - [ ] 14500 tunnel survives Terminal window visibility changes or reconnects

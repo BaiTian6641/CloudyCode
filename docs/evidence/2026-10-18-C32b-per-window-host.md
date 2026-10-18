@@ -423,3 +423,15 @@ that dialog behavior is verified.
   ship the same native artifact and core AAR.
 - VM scripts/setup, Cloudy Code backend pairing (C2.4) and
   `CORE-CONTRACT.md` cover the rest of C4 packaging.
+
+
+## C5 xterm and runtime evidence
+
+- Default xterm could not load the bitmap misc-fixed font in the VM. Launching
+  `xterm -fa Monospace -fs 12` created a 1306x747 host (output 4, xid
+  0x20000c) with a working shell prompt, verifying the Xlib toolkit path.
+- `dumpsys meminfo dev.cloudy.x11`: total PSS 65,710 KB, native heap 8,780 KB;
+  CPU snapshot ~0% for the app and :x11 process. Map-to-host launches observed
+  in the millisecond-to-tens-of-milliseconds range.
+- Remaining C5 work: fuzzing/sanitizers, corresponding-source release archive,
+  signed/reproducible release inputs, true dialog, caption/IME platform items.

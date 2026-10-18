@@ -183,9 +183,8 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C4.
 
 Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C5.
 
-- [~] Googlebook acceptance matrix: xeyes/Firefox/multi-window/close/reopen/
-  resize/pointer/hardware text and Cloudy Code env pass; xterm/dialog blocked or
-  not exercised.
+- [~] Googlebook acceptance matrix: xeyes/Firefox/xterm/multi-window/close/
+  reopen/resize/pointer/hardware text and Cloudy Code env pass; dialog blocked.
 - [~] Map-to-host latency (~9 ms), frame/present logs; full memory/display matrix pending.
 - [~] Token/HMAC, no-TCP, stale-tunnel replacement and native bridge tests pass;
   fuzzing/sanitizers pending.
