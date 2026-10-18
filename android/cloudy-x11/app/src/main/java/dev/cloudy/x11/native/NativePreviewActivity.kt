@@ -213,9 +213,11 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
 
     private fun applyTaskTitle() {
         setTitle(windowTitle)
+        window.setTitle(windowTitle)
         setTaskDescription(ActivityManager.TaskDescription(windowTitle))
         window.decorView.post {
             setTitle(windowTitle)
+            window.setTitle(windowTitle)
             setTaskDescription(ActivityManager.TaskDescription(windowTitle))
         }
     }

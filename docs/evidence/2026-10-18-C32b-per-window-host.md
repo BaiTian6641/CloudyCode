@@ -350,3 +350,15 @@ C3.3 title/icon stays open.
   for per-window titles; title/icon remains open.
 - Dialog windows (role 3) are now admitted to per-window host creation; device
   dialog verification is still pending.
+
+
+## Caption and soft-IME blockers
+
+- `Window.setTitle(windowTitle)` was also called after `Activity.setTitle` and
+  `TaskDescription(label="xeyes")`; the Google free-form caption still shows
+  the ActivityInfo label "Cloudy X11". Dynamic per-X-window captions require a
+  custom caption overlay or system-side support. The task descriptor remains
+  `label="xeyes"` for recents.
+- Soft IME: `ImeTracker ... onShown` confirms showSoftInput, but no keyboard is
+  visible over the on-top engine Surface. Translucent/normal Surface hides
+  engine pixels. Hardware key/text forwarding is the working interaction path.
