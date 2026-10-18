@@ -168,23 +168,30 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
 
 Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C4.
 
-- [ ] Package `cloudy-x11-core`/`cloudy-x11-app`/`cloudy-x11-vm` boundaries;
-  Cloudy Code pairing.
+- [x] Package `cloudy-x11-core`/`cloudy-x11-app`/`cloudy-x11-vm` boundaries;
+  Cloudy Code backend environment pairing verified. Core AAR `:core`; app and
+  VM scripts remain.
+- [x] Core/app build, native bridge, 16 KB and xeyes smoke test.
 - [ ] Pairing/setup/lifecycle UX: VM required/unavailable, stop/reset, app
   update, service/notification policy.
-- [ ] Remote-console core contract + second test host.
-- [ ] GBCode/Cloudy Code remain consumers only; no code dependency.
-- [ ] Commit.
+- [x] Remote-console contract recorded (`CORE-CONTRACT.md`); a second host
+  app is not built.
+- [x] GBCode/Cloudy Code remain consumers only; no code dependency in the X11 path.
+- [x] Commit C4 packaging and evidence.
 
 ## T5 — Acceptance, security, release
 
 Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C5.
 
-- [ ] Googlebook acceptance matrix from `GOAL.md`; Terminal + Cloudy Code.
-- [ ] Performance/latency/memory; external display/scale changes.
-- [ ] Adversarial transport/X11 tests; native fuzzing/sanitizers; no TCP.
-- [ ] GPLv3 notices/SBOM/corresponding source; signed APK/reproducible inputs.
-- [ ] Commit and release evidence.
+- [~] Googlebook acceptance matrix: xeyes/Firefox/multi-window/close/reopen/
+  resize/pointer/hardware text and Cloudy Code env pass; xterm/dialog blocked or
+  not exercised.
+- [~] Map-to-host latency (~9 ms), frame/present logs; full memory/display matrix pending.
+- [~] Token/HMAC, no-TCP, stale-tunnel replacement and native bridge tests pass;
+  fuzzing/sanitizers pending.
+- [~] GPLv3 pin/notices/SBOM metadata and 16 KB/signing evidence recorded;
+  corresponding-source archive and reproducible release inputs pending.
+- [x] Commit acceptance/check evidence.
 
 ## Evidence log
 
