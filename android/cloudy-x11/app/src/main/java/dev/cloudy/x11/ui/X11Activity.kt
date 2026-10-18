@@ -383,7 +383,7 @@ class X11Activity : Activity() {
             putBoolean("android.content.extra.IS_SENSITIVE", true)
         }
         clipboard.setPrimaryClip(clip)
-        detail.text = "Setup v2 command copied. Paste it into Terminal and press Enter. " +
+        detail.text = "Setup v3 command copied. Paste it into Terminal and press Enter. " +
             "This one-time setup installs the persistent display service."
     }
 

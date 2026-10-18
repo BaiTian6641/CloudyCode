@@ -206,3 +206,18 @@ not require an in-app app picker.
   VM-side proxy; that is the one-time VM setup's job.
 - The app now receives engine state broadcasts: `ready` or
   `VM display not ready. Run Set up X11 once.` instead of silently pretending.
+
+
+## Target-only setup v3
+
+The setup asset was replaced with a 27 KB native-only installer. It:
+- writes `~/.local/share/cloudy/cloudy-x11-setup.sh` and removes the old
+  `~/cloudy-x11-setup.sh`;
+- installs no xpra/sessiond and stops/disables the old prototype units;
+- installs the VM `:99` proxy as a persistent user service with
+  `unix:$BASE/x11-tunnel.sock` and `--cookie-file`;
+- installs the 14500 bridge service without an xpra dependency;
+- writes global `DISPLAY=:99`/`XAUTHORITY` and enables linger.
+
+The APK asset and `tools/device/cloudy-x11-setup.sh` are identical. The native
+unit is independent of the old xpra HTML5 viewer.
