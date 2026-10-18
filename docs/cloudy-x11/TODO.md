@@ -171,7 +171,13 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
   metadata/checksums, optional signed release mode, docs.
 - [x] Local validation: both app builds, clean pinned-engine build/JNI link,
   debug/release APK assembly, signature checks, 16 KB checks.
-- [ ] Observe a GitHub Actions debug run and download/verify its artifact.
+- [x] GitHub Actions debug runs passed on `781c4cb`: Cloudy-X11 run
+  `39099120467` artifact `cloudy-x11-debug-arm64-v8a-781c4cbd-run39099120467-attempt1`;
+  Cloudy Code run `39099120508` artifact
+  `cloudy-code-debug-universal-781c4cbd-run39099120508-attempt1`.
+- [ ] Download artifacts outside Actions (GitHub artifact API requires auth;
+  workflow verification already passed). Cloudy Code clean artifact is a shell:
+  generated web workbench assets are absent unless `package-web-assets.sh` runs.
 - [x] Release signing is explicitly unconfigured; app-specific secret names and
   trusted `main` ref enforcement documented.
 

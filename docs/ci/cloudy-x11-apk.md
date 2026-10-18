@@ -241,12 +241,37 @@ the pipeline. Uninstall/reinstall is an explicit device operator decision.
 - **Artifact upload failure:** `if-no-files-found: error` means the APK was not
   staged; inspect the verification step instead of uploading a wildcard.
 
-## Validation status
+## Validation status (2026-10-18)
 
 Local validation completed for both apps: Gradle wrappers, lint and unit-test
 tasks, debug/release assembly, APK inspection, debug signature verification,
-throwaway-key release signing, and 16 KB checks. GitHub Actions execution and
-the real release key are not configured in this checkout.
+throwaway-key release signing, and 16 KB checks. The pinned engine was cloned
+recursively and `LorieNative`/JNI linked from a clean build directory.
+
+GitHub Actions debug runs observed passing on commit
+`781c4cbd20ff4382c90884fecd1a54e4ced3acfc`:
+
+| App | Run | Artifact | Artifact size |
+|---|---|---|---|
+| Cloudy-X11 | https://github.com/BaiTian6641/CloudyCode/actions/runs/39099120467 | `cloudy-x11-debug-arm64-v8a-781c4cbd-run39099120467-attempt1` | 9,507,481 bytes |
+| Cloudy Code | https://github.com/BaiTian6641/CloudyCode/actions/runs/39099120508 | `cloudy-code-debug-universal-781c4cbd-run39099120508-attempt1` | 1,468,059 bytes |
+
+Both jobs passed all enabled steps, including wrapper validation, lint/unit
+gates, native-engine preparation (Cloudy-X11), APK verification/signature
+checks, 16 KB checks and artifact upload.
+
+The artifacts could not be downloaded from this environment: GitHub's artifact
+API returned HTTP 401 without authentication. Download them from the run's
+**Artifacts** section while signed in; the verification step inside each job
+already passed. Manual PR, manual debug and release modes were not executed
+here; release secrets are not configured and no production key was used. A
+throwaway local key exercised the signing/verification path only.
+
+Cloudy Code clean builds omit the gitignored 179 MB generated Code-OSS web
+workbench assets. The CI artifact is therefore an installable **shell** that
+supports the code-server proxy mode; the installed-frontend/offline workbench
+requires `tools/release/package-web-assets.sh` with the pinned external dists
+before assembly. See `docs/ci/cloudy-code-apk.md`.
 
 This pipeline proves build/package/signature identity. X11 forwarding,
 independent freeform windows, Cloudy Code runtime behavior and physical
