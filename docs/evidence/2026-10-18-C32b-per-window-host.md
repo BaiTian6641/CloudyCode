@@ -333,3 +333,20 @@ fixed label was removed so the caption can use the per-window task description.
 A post-change screenshot needs a valid xeyes host; terminal injection did not
 submit another xeyes in this session, so the caption remains unverified and
 C3.3 title/icon stays open.
+
+
+## Soft IME, dialog policy and caption limit
+
+- Added `ImeRelayView` and long-press activation. After long-press, logcat
+  reported `ImeTracker ... onShown`, but the system IME did not render over the
+  on-top engine Surface. A translucent window with a normal Surface made the
+  keyboard possible in theory but hid engine pixels (black xeyes host), so that
+  path was reverted. Hardware key/text forwarding remains active; soft IME is
+  still open.
+- Removed the fixed Activity label to allow the free-form caption to use the
+  TaskDescription. The caption became blank rather than "xeyes"; restored
+  `android:label="Cloudy X11"`. The task descriptor is `label="xeyes"`, but the
+  Google free-form caption ignores it. A custom overlay caption would be needed
+  for per-window titles; title/icon remains open.
+- Dialog windows (role 3) are now admitted to per-window host creation; device
+  dialog verification is still pending.

@@ -54,6 +54,7 @@
             android:documentLaunchMode="always"
             android:resizeableActivity="true"
             android:excludeFromRecents="false"
+            android:label="Cloudy X11"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboardHidden" />
         <service
             android:name=".native.NativeEngineService"

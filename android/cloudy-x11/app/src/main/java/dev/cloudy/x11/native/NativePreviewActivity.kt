@@ -18,12 +18,18 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.GestureDetector
 import android.view.SurfaceHolder
+import android.view.ViewGroup
 import android.view.SurfaceView
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
+import android.widget.FrameLayout
+import android.widget.TextView
 import dev.cloudy.x11.engine.ICloudyX11Engine
 
 /**
@@ -42,6 +48,14 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
     private var acceptedGeneration = -1
     private var bindWindowStarted = 0L
     private var retry: Runnable? = null
+    private lateinit var imeRelay: ImeRelayView
+    private val gestureDetector by lazy {
+        GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onLongPress(e: MotionEvent) {
+                showSoftKeyboard()
+            }
+        })
+    }
     private val windowId by lazy { intent.getIntExtra("window_id", 0) }
     private val outputId by lazy { intent.getIntExtra("output_id", 0) }
     private val windowTitle by lazy {
@@ -102,15 +116,30 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
             isFocusableInTouchMode = true
             isClickable = true
             setBackgroundColor(Color.BLACK)
-            // A normal SurfaceView is placed behind the Activity window; the
-            // opaque black window would hide every engine frame. Put this
-            // diagnostic surface above the window (no overlapping app UI).
+            // Engine pixels must sit above the opaque window. Soft IME remains
+            // hardware-key/text forwarding; the system IME cannot overlay this
+            // on-top surface reliably.
             setZOrderOnTop(true)
             holder.addCallback(this@NativePreviewActivity)
             holder.setFormat(PixelFormat.RGBA_8888)
         }
-        surfaceView.setOnTouchListener { _, event -> handlePointer(event) }
-        setContentView(surfaceView)
+        surfaceView.setOnTouchListener { _, event ->
+            handlePointer(event)
+            gestureDetector.onTouchEvent(event)
+            true
+        }
+        imeRelay = ImeRelayView(this).apply {
+            onCommit = { text -> sendSoftText(text) }
+            onKey = { xKey, down -> sendSoftKey(xKey, down) }
+            keyFor = { androidKey -> specialKeys[androidKey] ?: 0 }
+        }
+        val root = FrameLayout(this).apply {
+            addView(surfaceView, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(imeRelay, FrameLayout.LayoutParams(1, 1))
+        }
+        setContentView(root)
         log("create task=$taskId ${bounds()}")
         window.decorView.post { log("laidOut task=$taskId ${bounds()}") }
         if (windowId > 0) {
@@ -148,6 +177,32 @@ class NativePreviewActivity : Activity(), SurfaceHolder.Callback {
         log("surfaceCreated gen=$surfaceGeneration valid=${holder.surface.isValid} ${bounds()}")
         surfaceView.requestFocus()
         scheduleBind(0)
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
+    private fun showSoftKeyboard() {
+        imeRelay.requestFocus()
+        val imm = getSystemService(InputMethodManager::class.java)
+        imeRelay.post {
+            imm.showSoftInput(imeRelay, InputMethodManager.SHOW_IMPLICIT)
+            log("soft keyboard requested focused=${imeRelay.isFocused}")
+        }
+    }
+
+    private fun sendSoftText(text: String) {
+        val iface = engine ?: return
+        var i = 0
+        while (i < text.length) {
+            val codePoint = text.codePointAt(i)
+            iface.sendText(outputId, windowId, codePoint)
+            i += Character.charCount(codePoint)
+        }
+    }
+
+    private fun sendSoftKey(xKey: Int, down: Boolean) {
+        engine?.sendKey(outputId, windowId, xKey, down)
     }
 
     override fun onResume() {

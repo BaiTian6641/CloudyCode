@@ -453,9 +453,11 @@ class NativeEngineService : Service(), X11Native.Callback {
             }
             return
         }
-        if (parent != 0 || width <= 0 || height <= 0) return
-        // LORIE_WINDOW_APPLICATION=0, LORIE_WINDOW_UNCLASSIFIED=2.
-        if (role != 0 && role != 2) return
+        if (width <= 0 || height <= 0) return
+        // APPLICATION=0, UNCLASSIFIED=2, DIALOG=3. Dialog transients may have
+        // a parent; they still get a separate host task.
+        if (role != 0 && role != 2 && role != 3) return
+        if (parent != 0 && role != 3) return
         mainHandler.post {
             if (windowHosts.containsKey(id)) return@post
             val label = title?.takeIf { it.isNotBlank() } ?: "X11 window"
