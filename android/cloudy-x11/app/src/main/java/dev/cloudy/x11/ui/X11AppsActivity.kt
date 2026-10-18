@@ -104,18 +104,22 @@ class X11AppsActivity : Activity() {
         }
     }
 
+    private fun startPerWindowSession() {
+        val dm = resources.displayMetrics
+        val left = (dm.widthPixels * 0.64f).toInt()
+        val top = (dm.heightPixels * 0.08f).toInt()
+        val right = (dm.widthPixels * 0.96f).toInt()
+        val bottom = (dm.heightPixels * 0.34f).toInt()
+        val opts = ActivityOptions.makeBasic()
+            .setLaunchBounds(Rect(left, top, right, bottom)).toBundle()
+        startActivity(Intent(this, dev.cloudy.x11.native.PerWindowSessionActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), opts)
+        finish()
+    }
+
     private fun handleLaunchModeIntent() {
         if (intent.getBooleanExtra("per_window_host", false)) {
-            val dm = resources.displayMetrics
-            val left = (dm.widthPixels * 0.64f).toInt()
-            val top = (dm.heightPixels * 0.08f).toInt()
-            val right = (dm.widthPixels * 0.96f).toInt()
-            val bottom = (dm.heightPixels * 0.34f).toInt()
-            val opts = ActivityOptions.makeBasic()
-                .setLaunchBounds(Rect(left, top, right, bottom)).toBundle()
-            startActivity(Intent(this, dev.cloudy.x11.native.PerWindowSessionActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), opts)
-            finish()
+            startPerWindowSession()
             return
         }
         if (intent.getBooleanExtra("per_window", false)) {
@@ -232,6 +236,10 @@ class X11AppsActivity : Activity() {
         col.addView(Button(this).apply {
             text = "Full Linux desktop"
             setOnClickListener { launchViewer(14500, null, "Linux desktop", false) }
+        })
+        col.addView(Button(this).apply {
+            text = "Native X11 session (per-window)"
+            setOnClickListener { startPerWindowSession() }
         })
         col.addView(Button(this).apply {
             text = "X11 setup / repair"

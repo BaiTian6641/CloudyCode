@@ -125,3 +125,12 @@ were produced. The service must be restarted and ready **before** the client.
 Fix committed: `PerWindowSessionActivity` now requests the engine foreground
 service from `onCreate`, `onResume`, and `onNewIntent`, so reopening/bringing the
 session host restarts a dead engine. This is the path for the next check.
+
+
+## User-visible control (2026-10-18)
+
+The app now exposes **Native X11 session (per-window)** in the Cloudy-X11
+launcher. It starts the small session host with free-form bounds and closes the
+launcher, so the user does not need an adb-only intent. The session host starts
+or restarts the engine on create/resume/new-intent. This is the supported route
+for the next xeyes/xterm check.
