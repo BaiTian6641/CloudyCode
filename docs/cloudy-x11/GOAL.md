@@ -110,9 +110,12 @@ app is extracted. Do not add new X11 features back into GBCode.
   `upstream/engine.lock.json`; `LorieNative` and `lorie-smoke` build with NDK
   `27.3.13750724`. The smoke host starts on the Googlebook under the app UID:
   `native X11 ready :0`, exit 0. It is not yet integrated into the APK.
-- **Not implemented yet:** VM display proxy/tunnel, VM-wide `DISPLAY=:99`,
-  Cloudy Code backend environment, renderer/per-window Surface host, per-window
-  tasks/resize, standalone core API.
+- **T2 in progress:** VM display proxy (`:99`, token-authenticated app tunnel,
+  frame multiplexing), app-side tunnel harness, VM-wide environment installer and
+  systemd service are implemented; transport framing passed. The fresh-VM setup
+  is integrated into the standalone app's setup card. Pending: the VM X11 display
+  test from Terminal/Cloudy Code and the Android tunnel/engine host. Renderer,
+  per-window Surface tasks/resize and the standalone core API remain.
 - **Corrections:** `df86bbe` was reviewed but **not reverted**; the correction is
   forward. The shipped code is the per-app seamless/fit route, not the
   openbox/`start-desktop` WM route.

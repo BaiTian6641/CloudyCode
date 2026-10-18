@@ -364,9 +364,10 @@ class X11Activity : Activity() {
     private fun showSetup(text: String) {
         setupView.visibility = View.VISIBLE
         status.text = text
-        detail.text = "Xpra runs a seamless X11 server in the Linux VM behind a token proxy. " +
-            "Run the setup once in the Terminal, then open GUI apps with DISPLAY=:100 " +
-            "(for example: DISPLAY=:100 firefox &). Keep the Terminal app open."
+        detail.text = "The setup installs the VM-wide X11 display (:99), the display " +
+            "proxy/app tunnel, Xauthority and the current prototype session service. " +
+            "Run it once in the Terminal; new shells and Cloudy Code inherit DISPLAY=:99. " +
+            "Keep the Terminal app open."
     }
 
     private fun copySetupCommand() {

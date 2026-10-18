@@ -27,7 +27,7 @@ curl -fsSL https://xpra.org/xpra.asc | sudo tee /usr/share/keyrings/xpra.asc >/d
 echo "deb [signed-by=/usr/share/keyrings/xpra.asc] https://xpra.org/ $CODENAME main" \
   | sudo tee /etc/apt/sources.list.d/xpra.list >/dev/null
 sudo apt-get update
-sudo apt-get install -y --no-install-recommends xpra xpra-x11 xpra-html5 xvfb x11-utils xterm x11-apps xdotool || {
+sudo apt-get install -y --no-install-recommends xpra xpra-x11 xpra-html5 xvfb x11-utils xterm x11-apps xauth xdotool || {
   echo "xpra still unavailable; check the xpra.org repo for $CODENAME:" >&2
   apt-cache policy xpra >&2
   exit 1
@@ -820,3 +820,497 @@ grep -q 'export DISPLAY=:100' "$BASHRC" 2>/dev/null || echo 'export DISPLAY=:100
 sed -i '/alias firefox=/d' "$BASHRC" 2>/dev/null || true
 echo "alias firefox='$BASE/cloudy-firefox'" >> "$BASHRC"
 grep -q 'alias cloudy-run=' "$BASHRC" 2>/dev/null || echo "alias cloudy-run='$BASE/cloudy-run'" >> "$BASHRC"
+
+# --- VM-wide X11 forwarding: display :99, VM proxy and app tunnel ---
+# The app connects to 127.0.0.1:14511 through the Terminal's forwarded port.
+# X11 authentication stays between the VM client and the app's embedded X
+# server; the proxy forwards the protocol transparently.
+cat > "$BASE/cloudy-x11-vm.py" <<'CLOUDY_X11_VM_PY'
+#!/usr/bin/env python3
+"""Cloudy-X11 VM display proxy (display :99).
+
+Owns /tmp/.X11-unix/X<display> and forwards each X11 client connection either to
+a local upstream X server (test mode) or to the Cloudy-X11 app over one
+authenticated framed connection (production mode). The proxy is transparent to
+the X11 protocol; X11 authentication remains between the client and the app's X
+server.
+
+Tunnel protocol (the app initiates the TCP connection to --tunnel-listen):
+  app -> proxy: b"CLOUDY-X11 " + token + b"\n"
+  proxy -> app: b"OK\n" (or b"ERR\n")
+  frame: type(1) + stream_id(!I) [+ length(!I) + payload for DATA]
+    O open, D data, C close.  The proxy sends O/D/C; the app sends D/C.
+"""
+import argparse
+import hmac
+import os
+import socket
+import struct
+import sys
+import threading
+import time
+
+MAX_FRAME = 1 << 20
+CHUNK = 65536
+
+
+def log(msg):
+    print(f"[cloudy-x11-vm] {msg}", flush=True)
+
+
+def parse_upstream(value):
+    if value.startswith("unix:"):
+        return ("unix", value[5:])
+    if value.startswith("tcp:"):
+        host, _, port = value[5:].rpartition(":")
+        return ("tcp", (host, int(port)))
+    raise ValueError("upstream must be unix:/path or tcp:host:port")
+
+
+def connect_addr(spec, timeout=5):
+    kind, addr = spec
+    s = socket.socket(socket.AF_UNIX if kind == "unix" else socket.AF_INET,
+                      socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    s.connect(addr)
+    s.settimeout(None)
+    return s
+
+
+def recv_exact(sock, n):
+    buf = bytearray()
+    while len(buf) < n:
+        part = sock.recv(n - len(buf))
+        if not part:
+            raise EOFError
+        buf += part
+    return bytes(buf)
+
+
+def pump(src, dst, on_eof):
+    try:
+        while True:
+            data = src.recv(CHUNK)
+            if not data:
+                break
+            dst.sendall(data)
+    except OSError:
+        pass
+    finally:
+        on_eof()
+
+
+class Proxy:
+    def __init__(self, args):
+        self.display = args.display.lstrip(":") if args.display.startswith(":") else args.display
+        self.display_path = f"/tmp/.X11-unix/X{self.display}"
+        self.upstream = parse_upstream(args.upstream) if args.upstream else None
+        self.tunnel_listen = parse_upstream(args.tunnel_listen) if args.tunnel_listen else None
+        if bool(self.upstream) == bool(self.tunnel_listen):
+            raise SystemExit("exactly one of --upstream or --tunnel-listen is required")
+        self.token = open(args.token_file).read().strip() if args.token_file else ""
+        self.client_wait = args.client_wait
+        self.app = None
+        self.app_ready = threading.Event()
+        self.app_lock = threading.Lock()
+        self.streams = {}
+        self.stream_lock = threading.Lock()
+        self.next_sid = 1
+        self.stop = threading.Event()
+
+    def start(self):
+        if self.tunnel_listen:
+            threading.Thread(target=self.tunnel_server, daemon=True).start()
+        self.display_server()
+
+    def display_server(self):
+        os.makedirs("/tmp/.X11-unix", exist_ok=True)
+        try:
+            os.unlink(self.display_path)
+        except FileNotFoundError:
+            pass
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(self.display_path)
+        os.chmod(self.display_path, 0o777)
+        srv.listen(64)
+        log(f"display :{self.display} on {self.display_path}")
+        while not self.stop.is_set():
+            conn, _ = srv.accept()
+            threading.Thread(target=self.client, args=(conn,), daemon=True).start()
+
+    # ---- local upstream (transport test) ----
+    def client(self, conn):
+        if self.upstream:
+            try:
+                up = connect_addr(self.upstream)
+            except OSError as e:
+                log(f"upstream connect failed: {e}")
+                conn.close()
+                return
+            threading.Thread(target=pump, args=(up, conn, up.close), daemon=True).start()
+            pump(conn, up, lambda: (conn.close(), up.close()))
+            return
+
+        # ---- app tunnel ----
+        if not self.app_ready.wait(timeout=self.client_wait):
+            log("client rejected: no app tunnel")
+            conn.close()
+            return
+        with self.stream_lock:
+            sid = self.next_sid
+            self.next_sid += 1
+            self.streams[sid] = conn
+        self.send_frame(b"O" + struct.pack("!I", sid))
+        while True:
+            try:
+                data = conn.recv(CHUNK)
+            except OSError:
+                data = b""
+            if not data:
+                break
+            self.send_frame(b"D" + struct.pack("!I", sid) + struct.pack("!I", len(data)) + data)
+        with self.stream_lock:
+            self.streams.pop(sid, None)
+        self.send_frame(b"C" + struct.pack("!I", sid))
+        conn.close()
+
+    def send_frame(self, frame):
+        with self.app_lock:
+            app = self.app
+        if app is None:
+            return
+        try:
+            app.sendall(frame)
+        except OSError:
+            pass
+
+    def tunnel_server(self):
+        kind, addr = self.tunnel_listen
+        if kind == "unix":
+            try:
+                os.unlink(addr)
+            except FileNotFoundError:
+                pass
+            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            srv.bind(addr)
+            os.chmod(addr, 0o600)
+            log(f"tunnel on unix:{addr}")
+        else:
+            srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.bind(addr)
+            log(f"tunnel on tcp:{addr[0]}:{addr[1]}")
+        srv.listen(1)
+        while not self.stop.is_set():
+            conn, peer = srv.accept()
+            if self.app_ready.is_set():
+                log(f"rejecting second app from {peer}")
+                conn.close()
+                continue
+            try:
+                line = b""
+                conn.settimeout(5)
+                while not line.endswith(b"\n") and len(line) < 256:
+                    line += conn.recv(1)
+                conn.settimeout(None)
+                expected = f"CLOUDY-X11 {self.token}\n".encode()
+                if not hmac.compare_digest(line, expected):
+                    conn.sendall(b"ERR\n")
+                    conn.close()
+                    log(f"app auth failed from {peer}")
+                    continue
+                conn.sendall(b"OK\n")
+            except OSError as e:
+                log(f"app handshake failed: {e}")
+                conn.close()
+                continue
+            with self.app_lock:
+                self.app = conn
+            self.app_ready.set()
+            log(f"app connected from {peer}")
+            threading.Thread(target=self.app_reader, args=(conn,), daemon=True).start()
+
+    def app_reader(self, app):
+        try:
+            while True:
+                kind = recv_exact(app, 1)
+                sid = struct.unpack("!I", recv_exact(app, 4))[0]
+                if kind == b"D":
+                    size = struct.unpack("!I", recv_exact(app, 4))[0]
+                    if size > MAX_FRAME:
+                        break
+                    data = recv_exact(app, size)
+                    with self.stream_lock:
+                        client = self.streams.get(sid)
+                    if client is not None:
+                        try:
+                            client.sendall(data)
+                        except OSError:
+                            pass
+                elif kind == b"C":
+                    with self.stream_lock:
+                        client = self.streams.pop(sid, None)
+                    if client is not None:
+                        client.close()
+                else:
+                    log(f"bad frame type {kind!r}")
+                    break
+        except (EOFError, OSError):
+            pass
+        finally:
+            with self.app_lock:
+                self.app = None
+            self.app_ready.clear()
+            with self.stream_lock:
+                clients = list(self.streams.values())
+                self.streams.clear()
+            for client in clients:
+                client.close()
+            app.close()
+            log("app disconnected")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--display", default=":99")
+    ap.add_argument("--upstream", help="unix:/path or tcp:host:port (test mode)")
+    ap.add_argument("--tunnel-listen", help="tcp:127.0.0.1:14511 (app mode)")
+    ap.add_argument("--token-file")
+    ap.add_argument("--client-wait", type=float, default=30.0)
+    args = ap.parse_args()
+    if args.tunnel_listen and not args.token_file:
+        ap.error("--token-file is required with --tunnel-listen")
+    Proxy(args).start()
+
+
+if __name__ == "__main__":
+    main()
+CLOUDY_X11_VM_PY
+chmod +x "$BASE/cloudy-x11-vm.py"
+cat > "$BASE/cloudy-x11-install-env.sh" <<'CLOUDY_X11_ENV_SH'
+#!/bin/sh
+# Install the VM-wide Cloudy-X11 display environment and user service.
+# Usage: install-env.sh [--base DIR] [--display :99] [--system]
+set -eu
+BASE="${HOME}/.local/share/cloudy-x11-vm"
+DISPLAY=":99"
+SYSTEM=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) BASE="$2"; shift 2 ;;
+    --display) DISPLAY="$2"; shift 2 ;;
+    --system) SYSTEM=1; shift ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+mkdir -p "$BASE" "$HOME/.config/environment.d" "$HOME/.config/systemd/user"
+XAUTH="$BASE/Xauthority"
+if [ ! -s "$XAUTH" ]; then
+  umask 077
+  COOKIE=$(python3 - <<'PY'
+import secrets
+print(secrets.token_hex(16))
+PY
+)
+  xauth -f "$XAUTH" add "$DISPLAY" . "$COOKIE"
+  xauth -f "$XAUTH" add ":98" . "$COOKIE"
+  echo "created $XAUTH (display $DISPLAY)"
+fi
+cat > "$HOME/.config/environment.d/90-cloudy-x11.conf" <<EOF
+DISPLAY=$DISPLAY
+XAUTHORITY=$XAUTH
+EOF
+# Replace the prototype's fixed :100 export with the VM-wide Cloudy display.
+for rc in "$HOME/.bashrc" "$HOME/.profile"; do
+  [ -f "$rc" ] || continue
+  grep -v 'export DISPLAY=:100' "$rc" > "$rc.cloudy.tmp" || true
+  if ! grep -q 'CLOUDY_X11_DISPLAY' "$rc.cloudy.tmp"; then
+    cat >> "$rc.cloudy.tmp" <<EOF
+# CLOUDY_X11_DISPLAY
+export DISPLAY=$DISPLAY
+export XAUTHORITY=$XAUTH
+EOF
+  fi
+  mv "$rc.cloudy.tmp" "$rc"
+done
+if [ "$SYSTEM" = 1 ]; then
+  printf '# CLOUDY_X11_DISPLAY\nexport DISPLAY=%s\nexport XAUTHORITY=%s\n' "$DISPLAY" "$XAUTH" \
+    | sudo tee /etc/profile.d/cloudy-x11.sh >/dev/null
+  echo "installed /etc/profile.d/cloudy-x11.sh"
+fi
+cat > "$HOME/.config/systemd/user/cloudy-x11-vm.service" <<EOF
+[Unit]
+Description=Cloudy-X11 VM display proxy (:99)
+After=default.target
+
+[Service]
+ExecStart=/usr/bin/python3 $BASE/cloudy-x11-vm.py --display $DISPLAY --tunnel-listen 127.0.0.1:14511 --token-file $BASE/x11-token
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+if [ ! -s "$BASE/x11-token" ]; then
+  echo "missing $BASE/x11-token; the app setup must write the per-install token" >&2
+fi
+systemctl --user enable cloudy-x11-vm.service 2>/dev/null || true
+echo "Installed environment and service. Restart the Cloudy Code backend and open a new shell."
+echo "Test (VM): $BASE/cloudy-x11-vm.py + tunnel-test.py with a local Xvfb; see README."
+CLOUDY_X11_ENV_SH
+chmod +x "$BASE/cloudy-x11-install-env.sh"
+cat > "$BASE/cloudy-x11-tunnel-test.py" <<'CLOUDY_X11_TUNNEL_TEST'
+#!/usr/bin/env python3
+"""App-side Cloudy-X11 tunnel test harness / protocol reference.
+
+Connects to the VM proxy, authenticates with the per-install token, and forwards
+every opened stream to a local upstream X server. In the product this role is
+served by the embedded X server service; this harness proves the VM proxy and
+the framing without Android.
+"""
+import argparse
+import socket
+import struct
+import threading
+
+CHUNK = 65536
+MAX_FRAME = 1 << 20
+
+
+def parse_addr(value):
+    if value.startswith("unix:"):
+        return ("unix", value[5:])
+    if value.startswith("tcp:"):
+        host, _, port = value[5:].rpartition(":")
+        return ("tcp", (host, int(port)))
+    raise ValueError(value)
+
+
+def connect(spec, timeout=5):
+    kind, addr = spec
+    s = socket.socket(socket.AF_UNIX if kind == "unix" else socket.AF_INET,
+                      socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    s.connect(addr)
+    s.settimeout(None)
+    return s
+
+
+def recv_exact(sock, n):
+    buf = bytearray()
+    while len(buf) < n:
+        part = sock.recv(n - len(buf))
+        if not part:
+            raise EOFError
+        buf += part
+    return bytes(buf)
+
+
+class Bridge:
+    def __init__(self, args):
+        self.connect_addr = parse_addr(args.connect)
+        self.upstream = parse_addr(args.upstream)
+        self.token = open(args.token_file).read().strip()
+        self.app = None
+        self.lock = threading.Lock()
+        self.streams = {}
+
+    def send(self, frame):
+        with self.lock:
+            app = self.app
+        if app:
+            try:
+                app.sendall(frame)
+            except OSError:
+                pass
+
+    def upstream_reader(self, sid, upstream):
+        try:
+            while True:
+                data = upstream.recv(CHUNK)
+                if not data:
+                    break
+                self.send(b"D" + struct.pack("!I", sid) + struct.pack("!I", len(data)) + data)
+        except OSError:
+            pass
+        finally:
+            self.send(b"C" + struct.pack("!I", sid))
+            try:
+                upstream.close()
+            except OSError:
+                pass
+
+    def run(self):
+        app = connect(self.connect_addr)
+        app.sendall(f"CLOUDY-X11 {self.token}\n".encode())
+        line = b""
+        while not line.endswith(b"\n"):
+            part = app.recv(1)
+            if not part:
+                raise SystemExit("tunnel closed during handshake")
+            line += part
+        if line.strip() != b"OK":
+            raise SystemExit(f"tunnel auth failed: {line!r}")
+        self.app = app
+        print("tunnel connected", flush=True)
+        try:
+            while True:
+                kind = recv_exact(app, 1)
+                sid = struct.unpack("!I", recv_exact(app, 4))[0]
+                if kind == b"O":
+                    up = connect(self.upstream)
+                    self.streams[sid] = up
+                    threading.Thread(target=self.upstream_reader, args=(sid, up), daemon=True).start()
+                elif kind == b"D":
+                    size = struct.unpack("!I", recv_exact(app, 4))[0]
+                    if size > MAX_FRAME:
+                        raise SystemExit("oversized frame")
+                    data = recv_exact(app, size)
+                    up = self.streams.get(sid)
+                    if up:
+                        up.sendall(data)
+                elif kind == b"C":
+                    up = self.streams.pop(sid, None)
+                    if up:
+                        up.close()
+                else:
+                    raise SystemExit(f"bad frame {kind!r}")
+        except (EOFError, OSError):
+            pass
+        finally:
+            for up in self.streams.values():
+                try:
+                    up.close()
+                except OSError:
+                    pass
+            app.close()
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--connect", required=True, help="tcp:127.0.0.1:14511")
+    ap.add_argument("--token-file", required=True)
+    ap.add_argument("--upstream", required=True, help="unix:/tmp/.X11-unix/X98")
+    Bridge(ap.parse_args()).run()
+
+
+if __name__ == "__main__":
+    main()
+CLOUDY_X11_TUNNEL_TEST
+chmod +x "$BASE/cloudy-x11-tunnel-test.py"
+
+# VM-wide DISPLAY=:99/XAUTHORITY (profile, environment.d, /etc/profile.d) and
+# the systemd user unit for the display proxy.
+"$BASE/cloudy-x11-install-env.sh" --base "$BASE" --display :99 --system \
+  || echo "VM-wide environment install reported an error" >&2
+systemctl --user daemon-reload 2>/dev/null || true
+systemctl --user enable cloudy-x11-vm.service 2>/dev/null || true
+systemctl --user restart cloudy-x11-vm.service 2>/dev/null || {
+  pkill -f 'cloudy-x11-vm.py' 2>/dev/null || true
+  nohup python3 "$BASE/cloudy-x11-vm.py" --display :99 --tunnel-listen 127.0.0.1:14511 \
+    --token-file "$BASE/x11-token" >"$BASE/x11-vm.log" 2>&1 &
+}
+
+echo "VM-wide X11 display: DISPLAY=:99 XAUTHORITY=$BASE/Xauthority"
+echo "Cloudy-X11 app tunnel: 127.0.0.1:14511 (VM proxy log: $BASE/x11-vm.log)"
+echo "Restart the Cloudy Code backend / open a new shell to inherit DISPLAY=:99."

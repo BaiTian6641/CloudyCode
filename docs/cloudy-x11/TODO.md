@@ -48,15 +48,21 @@ to the standalone token; sessiond `/list` 200; X Eyes session `14510` in the
 standalone app (`/tmp/cloudy-x11-xeyes2.png`); GBCode release-signed update
 installed with no X11 launcher; engine smoke X1a in `8666b25`.
 
-## T2 — VM-wide forwarding (next)
+## T2 — VM-wide forwarding (in progress)
 
-- [ ] `cloudy-x11-vm`: display proxy `:99`, Xauthority, client accept, stream
-  multiplexing over the app-initiated channel; no X11 TCP.
-- [ ] Install VM-wide env: `/etc/profile.d`, user profile, environment.d/systemd
-  user, Cloudy Code backend launch.
+- [x] `cloudy-x11-vm`: display proxy `:99`, token-authenticated app tunnel,
+  frame multiplexing, local-upstream test mode; no X11 TCP listener.
+- [x] App-side tunnel protocol harness (`tunnel-test.py`); transport test passed
+  with a fake upstream (`hello-through-tunnel`).
+- [x] VM-wide environment installer: Xauthority, profile/`.bashrc`,
+  environment.d/systemd, `/etc/profile.d`, proxy service, Cloudy Code restart note.
+- [ ] Fresh-VM setup integrated in the standalone app's setup card (VM proxy,
+  env installer, tunnel harness, prototype service); **done in source, pending
+  device setup-card run**.
+- [ ] VM X11 display test: Xvfb + tunnel harness + `DISPLAY=:99 xdpyinfo` from a
+  Terminal shell; then Cloudy Code's integrated terminal; not the Terminal
+  graphics screen.
 - [ ] Prove the app→VM route for native socket and WebView separately (S00.03).
-- [ ] `xeyes` from a fresh Terminal shell and from Cloudy Code's integrated
-  terminal → Cloudy-X11 tasks, not the Terminal graphics screen.
 - [ ] Verify stale backend/old `DISPLAY` detection and setup reruns.
 - [ ] Commit with device evidence.
 
