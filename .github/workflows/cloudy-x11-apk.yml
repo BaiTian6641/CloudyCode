@@ -1,0 +1,44 @@
+name: Cloudy-X11 APK
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Build mode (signed release requires refs/heads/main and release secrets)
+        type: choice
+        options: [debug, release]
+        default: debug
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudy-x11-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'debug' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'release' }}
+
+jobs:
+  build:
+    uses: ./.github/workflows/_cloudy-apk-build.yml
+    with:
+      app_name: Cloudy-X11
+      app_slug: cloudy-x11
+      project_dir: android/cloudy-x11
+      app_package: dev.cloudy.x11
+      mode: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'debug' }}
+      native_engine: true
+      abi_label: arm64-v8a
+      expected_abis: arm64-v8a
+      required_native_lib: lib/arm64-v8a/libcloudy_x11_native.so
+      required_assets: assets/xkb.zip,assets/cloudy-x11-setup.sh
+      implementation_stage: Embedded magicdesk-x11 native engine integrated; per-window X11 host.
+      engine_lock_revision: 65c3ced09a26d0df15085c72010af242cd660a94
+      cert_sha256: ${{ vars.CLOUDY_X11_CERT_SHA256 }}
+      secret_prefix: CLOUDY_X11
+    secrets:
+      KEYSTORE_BASE64: ${{ secrets.CLOUDY_X11_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.CLOUDY_X11_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.CLOUDY_X11_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.CLOUDY_X11_KEY_PASSWORD }}

@@ -164,6 +164,17 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
 - [x] Run v4 on the live VM and verify the persistent service plus a fresh
   xeyes native task. Guest log 101, engine auto-host and pixels verified.
 
+## CI — APK pipelines
+
+- [x] Cloudy-X11 and Cloudy Code workflows/reusable workflow implemented.
+- [x] Checked-in Gradle 9.8.1 wrappers, lint/unit gates, APK verification,
+  metadata/checksums, optional signed release mode, docs.
+- [x] Local validation: both app builds, clean pinned-engine build/JNI link,
+  debug/release APK assembly, signature checks, 16 KB checks.
+- [ ] Observe a GitHub Actions debug run and download/verify its artifact.
+- [x] Release signing is explicitly unconfigured; app-specific secret names and
+  trusted `main` ref enforcement documented.
+
 ## T4 — Product integration and reuse
 
 Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C4.

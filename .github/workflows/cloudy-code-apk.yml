@@ -1,0 +1,44 @@
+name: Cloudy Code APK
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Build mode (signed release requires refs/heads/main and release secrets)
+        type: choice
+        options: [debug, release]
+        default: debug
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudy-code-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'debug' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'release' }}
+
+jobs:
+  build:
+    uses: ./.github/workflows/_cloudy-apk-build.yml
+    with:
+      app_name: Cloudy Code
+      app_slug: cloudy-code
+      project_dir: android/app
+      app_package: dev.gbcode.app
+      mode: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'debug' }}
+      native_engine: false
+      abi_label: universal
+      expected_abis: ''
+      required_native_lib: ''
+      required_assets: ''
+      implementation_stage: Cloudy Code Android/WebView shell; no native X11 engine in this APK.
+      engine_lock_revision: ''
+      cert_sha256: ${{ vars.CLOUDY_CODE_CERT_SHA256 }}
+      secret_prefix: CLOUDY_CODE
+    secrets:
+      KEYSTORE_BASE64: ${{ secrets.CLOUDY_CODE_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.CLOUDY_CODE_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.CLOUDY_CODE_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.CLOUDY_CODE_KEY_PASSWORD }}

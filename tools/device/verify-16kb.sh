@@ -5,8 +5,9 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APK="${1:-$ROOT/android/cloudy-x11/app/build/outputs/apk/debug/app-debug.apk}"
 SO="${2:-$ROOT/android/cloudy-x11/app/src/main/jniLibs/arm64-v8a/libcloudy_x11_native.so}"
 NDK="${ANDROID_NDK_HOME:-$HOME/Android/Sdk/ndk/27.3.13750724}"
+SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
 READELF="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-ZIPALIGN="$(ls -d "$HOME"/Android/Sdk/build-tools/* 2>/dev/null | sort -V | tail -1)/zipalign"
+ZIPALIGN="$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1)/zipalign"
 [ -f "$SO" ] || { echo "missing $SO; build the JNI first" >&2; exit 1; }
 [ -f "$APK" ] || { echo "missing $APK; assemble first" >&2; exit 1; }
 ALIGNMENTS="$("$READELF" -lW "$SO" | awk '/LOAD/{print $NF}' | sort -u)"

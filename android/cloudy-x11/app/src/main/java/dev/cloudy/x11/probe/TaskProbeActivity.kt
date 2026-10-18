@@ -12,6 +12,8 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import dev.cloudy.x11.R
 import java.io.File
 
@@ -26,9 +28,15 @@ class TaskProbeActivity : Activity() {
         intent.getStringExtra("probe_title") ?: "Cloudy probe $id"
     }
     private val handler = Handler(Looper.getMainLooper())
+    private val backCallback = OnBackInvokedCallback {
+        log("back id=$id task=${taskId}")
+        finishAndRemoveTask()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        onBackInvokedDispatcher.registerOnBackInvokedCallback(
+            OnBackInvokedDispatcher.PRIORITY_DEFAULT, backCallback)
         setTitle(title)
         applyTaskDescription(title)
         val text = TextView(this).apply {
@@ -91,13 +99,8 @@ class TaskProbeActivity : Activity() {
         log("new-intent id=$id task=${taskId} action=${intent.action}")
     }
 
-    @Deprecated("Probe measures the legacy Back path explicitly")
-    override fun onBackPressed() {
-        log("back id=$id task=${taskId}")
-        finishAndRemoveTask()
-    }
-
     override fun onDestroy() {
+        onBackInvokedDispatcher.unregisterOnBackInvokedCallback(backCallback)
         log("destroy id=$id task=${taskId} finishing=$isFinishing changing=${isChangingConfigurations}")
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()

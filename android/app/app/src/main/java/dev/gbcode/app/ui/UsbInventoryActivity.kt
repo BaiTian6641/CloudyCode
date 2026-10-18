@@ -179,11 +179,7 @@ class UsbInventoryActivity : Activity() {
         setContentView(root)
 
         val filter = IntentFilter(ACTION_USB_PERMISSION)
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(permissionReceiver, filter, RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(permissionReceiver, filter)
-        }
+        registerReceiver(permissionReceiver, filter, RECEIVER_EXPORTED)
         receiverRegistered = true
         scan()
         val handler = android.os.Handler(mainLooper)
