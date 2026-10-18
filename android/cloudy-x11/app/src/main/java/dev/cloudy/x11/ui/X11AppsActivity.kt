@@ -2,9 +2,12 @@ package dev.cloudy.x11.ui
 
 import android.app.Activity
 import android.app.ActivityOptions
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -54,6 +57,7 @@ class X11AppsActivity : Activity() {
     private var presetButtons: List<Button> = emptyList()
     private var probing = false
     private var watching = false
+    private var overlayPrompted = false
     private val openedSessions = mutableSetOf<Int>()
 
     private val watchRunnable = object : Runnable {
@@ -104,6 +108,37 @@ class X11AppsActivity : Activity() {
         }
     }
 
+    private fun maybeRequestOverlayPermission() {
+        if (Settings.canDrawOverlays(this) || overlayPrompted) return
+        overlayPrompted = true
+        AlertDialog.Builder(this)
+            .setTitle("Allow new-window tasks")
+            .setMessage("Cloudy-X11 needs the Display over other apps permission " +
+                "so a new X11 window can open while the Terminal stays focused. " +
+                "This is a one-time Android permission; no accessibility service is used.")
+            .setPositiveButton("Allow") { _, _ ->
+                try {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")))
+                } catch (e: Exception) {
+                    Log.w(TAG, "overlay settings failed: ${e.message}")
+                }
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+
+    private fun startNativeEngine() {
+        try {
+            startForegroundService(Intent(this,
+                dev.cloudy.x11.native.NativeEngineService::class.java)
+                .putExtra("action", "start"))
+            Log.i(TAG, "native engine start requested")
+        } catch (e: Exception) {
+            Log.w(TAG, "native engine start failed: ${e.message}")
+        }
+    }
+
     private fun startPerWindowSession() {
         val dm = resources.displayMetrics
         val left = (dm.widthPixels * 0.64f).toInt()
@@ -149,6 +184,8 @@ class X11AppsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (nativeProbe) return
+        startNativeEngine()
+        maybeRequestOverlayPermission()
         probe()
         if (!watching) {
             watching = true

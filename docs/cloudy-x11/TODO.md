@@ -6,11 +6,13 @@ The product goal and invariants are in `GOAL.md`; the detailed execution plan is
 changing the standalone app.
 
 **Current phase:** C3.2 per-X-window Android hosts. First VM `xeyes` pixels were
-rendered through the embedded engine into a real Android Surface; the diagnostic
-preview is not yet one task per X top-level. G1, C2.4, C2.5, G3 and C3.1 are
-complete; G2 is partially verified (visible task identity/bounds/title;
-background launch unproven). VM persistence/port-forward availability while
-Terminal is hidden is an observed external blocker.
+rendered through the embedded engine into a real Android Surface; per-window
+callbacks/tasks are implemented. The launcher now auto-starts the engine and
+prompts once for the Display-over-other-apps permission. **One-time VM setup**
+installs the persistent `cloudy-x11-vm` systemd service, global `DISPLAY=:99`,
+Xauthority and the 14500 bridge; do not run the VM Python script per shell.
+G1, C2.4, C2.5, G3 and C3.1 are complete; G2 background behavior is partially
+verified. The live VM unit is currently stale and needs the setup/repair rerun.
 
 ## T0 — Tracking and product boundary
 
@@ -113,8 +115,14 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
   JNI/APK; Gradle `preBuild` regenerates the JNI.
 - [x] Review hardening: HMAC pre-auth before sending the tunnel token, engine
   service/preview no longer exported, JSON config redaction, stream-close catch,
-  tunnel-loss service/engine teardown, bundled XKB asset extraction. Device
-  rerun of these final edits is pending because the VM stopped.
+  tunnel-loss service/engine teardown, bundled XKB asset extraction.
+- [x] Product startup: launcher auto-starts the engine; one-time overlay
+  permission prompt for task creation while Terminal is focused; session host
+  restarts a dead engine.
+- [ ] One-time VM setup rerun on the live VM: persistent `cloudy-x11-vm`
+  systemd unit with Unix socket + cookie file, global DISPLAY, and service
+  enable/linger. Current live unit is stale TCP 14511; never run the Python
+  script per shell as the product path.
 - [ ] **C3.2** Renderer/`LorieGraphics` (software first) + first free-form
   Googlebook task/Surface; `xeyes` visible.
 - [ ] **C3.3** Resize/input/IME/close/title/icon, multi-window/dialogs.
