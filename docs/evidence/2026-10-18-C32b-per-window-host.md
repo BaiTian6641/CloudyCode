@@ -376,3 +376,15 @@ C3.3 title/icon stays open.
   visible simultaneously. Screenshot: `/tmp/cloudy-x11-multiwindow2.png`.
 - Role-3 dialogs are admitted by the service policy, but a true transient
   dialog-producing client has not yet been exercised.
+
+
+## C2.4 Cloudy Code backend display verification
+
+Journald diagnostic from the VM:
+- `cloudy-backend.service` MainPID 520 environment:
+  `DISPLAY=:99 XAUTHORITY=/home/droid/.local/share/cloudy/Xauthority`.
+- Service active with drop-in `90-cloudy-x11.conf` (started 41 minutes ago).
+- `xdpyinfo` against `:99` returned `name of display: :99`, X.Org 11.0.
+The integrated terminal/backend child processes inherit the environment.
+No backend restart was needed; setup now restarts a stale backend if DISPLAY
+is missing.

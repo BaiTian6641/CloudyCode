@@ -29,9 +29,10 @@ verified. The live VM unit is currently stale and needs the setup/repair rerun.
   run once via the app's native **Set up X11** screen
   (`~/.local/share/cloudy/cloudy-x11-setup.sh`; v4, no xpra). The app cannot
   install VM sudo/systemd services itself.
-- **Not verified live:** close/reopen of an auto-hosted xeyes after the new
-  unmap broadcast; C2.4 UI integrated terminal; C3.3 input/resize/multi-window;
-  Cloudy Code sources; C4/C5.
+- **Verified live:** close/reopen, pointer/resize, three simultaneous X11
+  hosts, and C2.4 Cloudy Code backend environment (`DISPLAY=:99`, XAUTHORITY,
+  xdpyinfo). Title/soft IME are platform-blocked; true transient dialog,
+  C4/C5 remain.
 - **Firefox:** the 14509 curl error is the retired prototype GUI wrapper, not
   the display; `/usr/bin/firefox` is the native firefox-esr launcher. Setup now
   clears old `firefox`/`cloudy-firefox`/`cloudy-run` shell overrides. Immediate
