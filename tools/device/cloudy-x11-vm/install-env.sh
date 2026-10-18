@@ -15,8 +15,9 @@ while [ $# -gt 0 ]; do
 done
 mkdir -p "$BASE" "$HOME/.config/environment.d" "$HOME/.config/systemd/user"
 XAUTH="$BASE/Xauthority"
-if [ ! -s "$XAUTH" ]; then
-  umask 077
+umask 077
+COOKIE=$(xauth -f "$XAUTH" list "$DISPLAY" 2>/dev/null | awk 'NR==1{print $3}') || true
+if [ -z "${COOKIE:-}" ]; then
   COOKIE=$(python3 - <<'PY'
 import secrets
 print(secrets.token_hex(16))
@@ -26,6 +27,8 @@ PY
   xauth -f "$XAUTH" add ":98" . "$COOKIE"
   echo "created $XAUTH (display $DISPLAY)"
 fi
+printf '%s' "$COOKIE" > "$BASE/x11-cookie"
+chmod 600 "$BASE/x11-cookie"
 cat > "$HOME/.config/environment.d/90-cloudy-x11.conf" <<EOF
 DISPLAY=$DISPLAY
 XAUTHORITY=$XAUTH
@@ -54,7 +57,7 @@ Description=Cloudy-X11 VM display proxy (:99)
 After=default.target
 
 [Service]
-ExecStart=/usr/bin/python3 $BASE/cloudy-x11-vm.py --display $DISPLAY --tunnel-listen unix:$BASE/x11-tunnel.sock --token-file $BASE/x11-token
+ExecStart=/usr/bin/python3 $BASE/cloudy-x11-vm.py --display $DISPLAY --tunnel-listen unix:$BASE/x11-tunnel.sock --token-file $BASE/x11-token --cookie-file $BASE/x11-cookie
 Restart=on-failure
 RestartSec=2
 

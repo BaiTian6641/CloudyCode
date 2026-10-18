@@ -7,9 +7,12 @@ authenticated framed connection (production mode). The proxy is transparent to
 the X11 protocol; X11 authentication remains between the client and the app's X
 server.
 
-Tunnel protocol (the app initiates the TCP connection to --tunnel-listen):
+Tunnel protocol (the app side initiates the connection to --tunnel-listen):
   app -> proxy: b"CLOUDY-X11 " + token + b"\n"
-  proxy -> app: b"OK\n" (or b"ERR\n")
+  proxy -> app: b"OK " + display-cookie + b"\n" (or b"ERR\n")
+The display cookie comes from --cookie-file; without it the proxy sends bare
+OK, which the production 14500 bridge rejects. X11 auth itself remains between
+the VM client and the app's X server.
   frame: type(1) + stream_id(!I) [+ length(!I) + payload for DATA]
     O open, D data, C close.  The proxy sends O/D/C; the app sends D/C.
 """
@@ -84,6 +87,12 @@ class Proxy:
         if bool(self.upstream) == bool(self.tunnel_listen):
             raise SystemExit("exactly one of --upstream or --tunnel-listen is required")
         self.token = open(args.token_file).read().strip() if args.token_file else ""
+        self.cookie = ""
+        if getattr(args, "cookie_file", None):
+            try:
+                self.cookie = open(args.cookie_file).read().strip()
+            except OSError as e:
+                log(f"cookie file unreadable: {e}")
         self.client_wait = args.client_wait
         self.app = None
         self.app_ready = threading.Event()
@@ -194,7 +203,8 @@ class Proxy:
                     conn.close()
                     log(f"app auth failed from {peer}")
                     continue
-                conn.sendall(b"OK\n")
+                conn.sendall(("OK %s\n" % self.cookie).encode() if self.cookie
+                             else b"OK\n")
             except OSError as e:
                 log(f"app handshake failed: {e}")
                 conn.close()
@@ -251,6 +261,7 @@ def main():
     ap.add_argument("--upstream", help="unix:/path or tcp:host:port (test mode)")
     ap.add_argument("--tunnel-listen", help="tcp:127.0.0.1:14511 (app mode)")
     ap.add_argument("--token-file")
+    ap.add_argument("--cookie-file", help="Xauthority MIT-MAGIC-COOKIE-1 hex")
     ap.add_argument("--client-wait", type=float, default=30.0)
     args = ap.parse_args()
     if args.tunnel_listen and not args.token_file:

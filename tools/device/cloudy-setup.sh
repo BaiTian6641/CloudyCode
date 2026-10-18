@@ -665,6 +665,17 @@ case "$BACKEND" in
   *) echo "unknown backend: $BACKEND" >&2; exit 2;;
 esac
 
+# Cloudy-X11 owns the VM-wide display. Make the backend itself (not only an
+# interactive login shell) start with the display environment so extension
+# hosts, tasks, and integrated terminals inherit it. A drop-in preserves local
+# edits to the generated unit.
+mkdir -p "$UNITS/cloudy-backend.service.d"
+cat > "$UNITS/cloudy-backend.service.d/90-cloudy-x11.conf" <<EOF
+[Service]
+Environment=DISPLAY=:99
+Environment=XAUTHORITY=$BASE/Xauthority
+EOF
+
 if [ "$WITH_USB" = 1 ]; then
 # Root helper: import the USB/IP device and attach it through VHCI. No usbip
 # CLI is required (the kernel sysfs interface is used directly).

@@ -19,7 +19,7 @@ def parse_addr(value):
     if value.startswith("unix:"):
         return ("unix", value[5:])
     if value.startswith("tcp:"):
-        host, _, port = value[5:].rpartition(":")
+        host, _, port = value[4:].rpartition(":")
         return ("tcp", (host, int(port)))
     raise ValueError(value)
 
@@ -32,6 +32,28 @@ def connect(spec, timeout=5):
     s.connect(addr)
     s.settimeout(None)
     return s
+
+
+def read_line(sock, limit=4096):
+    data = b""
+    while len(data) < limit:
+        ch = sock.recv(1)
+        if not ch:
+            break
+        data += ch
+        if ch == b"\n":
+            break
+    return data
+
+
+def read_headers(sock, limit=8192):
+    data = b""
+    while len(data) < limit and not data.endswith(b"\r\n\r\n"):
+        ch = sock.recv(1)
+        if not ch:
+            raise EOFError("EOF in proxy headers")
+        data += ch
+    return data
 
 
 def recv_exact(sock, n):
@@ -49,6 +71,7 @@ class Bridge:
         self.connect_addr = parse_addr(args.connect)
         self.upstream = parse_addr(args.upstream)
         self.token = open(args.token_file).read().strip()
+        self.via_proxy = args.via_proxy
         self.app = None
         self.lock = threading.Lock()
         self.streams = {}
@@ -80,15 +103,37 @@ class Bridge:
 
     def run(self):
         app = connect(self.connect_addr)
-        app.sendall(f"CLOUDY-X11 {self.token}\n".encode())
-        line = b""
-        while not line.endswith(b"\n"):
-            part = app.recv(1)
-            if not part:
-                raise SystemExit("tunnel closed during handshake")
-            line += part
-        if line.strip() != b"OK":
-            raise SystemExit(f"tunnel auth failed: {line!r}")
+        if self.via_proxy:
+            host, port = self.connect_addr[1]
+            request = (f"GET /x11-tunnel HTTP/1.1\r\n"
+                       f"Host: {host}:{port}\r\n"
+                       f"Cookie: cloudy_x11={self.token}\r\n"
+                       "Upgrade: cloudy-x11\r\n"
+                       "Connection: Upgrade\r\n\r\n")
+            app.sendall(request.encode())
+            headers = read_headers(app)
+            first = headers.split(b"\r\n", 1)[0].decode("latin1", "replace")
+            if not first.startswith("HTTP/1.1 101"):
+                raise SystemExit(f"proxy upgrade failed: {first!r}")
+            config = read_line(app).decode("utf-8", "replace").strip()
+            if not config.startswith("CLOUDY-X11-CONFIG 1 "):
+                raise SystemExit(f"missing bridge config: {config[:80]!r}")
+            import json
+            cfg = json.loads(config.split(" ", 2)[2])
+            print("proxy connected display=%s generation=%s limits=%s/%s/%s"
+                  % (cfg.get("display"), cfg.get("generation"),
+                     cfg.get("max_frame"), cfg.get("max_streams"),
+                     cfg.get("max_queued_bytes")), flush=True)
+        else:
+            app.sendall(f"CLOUDY-X11 {self.token}\n".encode())
+            line = b""
+            while not line.endswith(b"\n"):
+                part = app.recv(1)
+                if not part:
+                    raise SystemExit("tunnel closed during handshake")
+                line += part
+            if not line.startswith(b"OK"):
+                raise SystemExit(f"tunnel auth failed: {line!r}")
         self.app = app
         print("tunnel connected", flush=True)
         try:
@@ -129,6 +174,8 @@ def main():
     ap.add_argument("--connect", required=True, help="tcp:127.0.0.1:14511")
     ap.add_argument("--token-file", required=True)
     ap.add_argument("--upstream", required=True, help="unix:/tmp/.X11-unix/X98")
+    ap.add_argument("--via-proxy", action="store_true",
+                    help="upgrade through the 14500 bridge instead of the Unix tunnel")
     Bridge(ap.parse_args()).run()
 
 

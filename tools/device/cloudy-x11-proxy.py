@@ -16,8 +16,10 @@ import argparse
 import hashlib
 import hmac
 import http.client
+import json
 import os
 import re
+import secrets
 import select
 import socket
 import sys
@@ -26,6 +28,18 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 COOKIE = "cloudy_x11"
+
+
+def _readline(sock, limit):
+    data = b""
+    while len(data) < limit:
+        chunk = sock.recv(1)
+        if not chunk:
+            break
+        data += chunk
+        if chunk == b"\n":
+            break
+    return data
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -91,9 +105,96 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._cookie_ok():
             return self._deny()
+        if parsed.path == "/x11-tunnel":
+            return self._x11_tunnel()
         if (self.headers.get("Upgrade", "").lower() == "websocket"):
             return self._tunnel()
         return self._proxy_http()
+
+    def _simple_error(self, code, text):
+        body = (text + "\n").encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+        self.close_connection = True
+
+    def _x11_tunnel(self):
+        """Raw HTTP Upgrade -> private VM Unix tunnel.
+
+        The bridge authenticates the app, performs the private VM-side
+        handshake, verifies it before 101, then emits exactly one versioned
+        configuration line before becoming a byte pump. It never parses X11
+        frames itself and never exposes the Unix socket on TCP.
+        """
+        if self.headers.get("Upgrade", "").lower() != "cloudy-x11":
+            return self._simple_error(400, "Upgrade: cloudy-x11 required")
+        upstream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        upstream.settimeout(3)
+        try:
+            upstream.connect(self.server.x11_tunnel_socket)
+            upstream.sendall(("CLOUDY-X11 %s\n" % self._token()).encode())
+            line = _readline(upstream, 512)
+        except OSError as e:
+            upstream.close()
+            self.log_message("x11 tunnel upstream failed: %s", e)
+            return self._simple_error(502, "display tunnel unavailable")
+        # A bare legacy OK is rejected: the bridge needs a display cookie.
+        if not line.startswith(b"OK ") or len(line) > 130:
+            upstream.close()
+            return self._simple_error(502, "display tunnel handshake failed")
+        cookie = line[3:].strip().decode("ascii", "replace")
+        if not re.fullmatch(r"[0-9a-fA-F]{32,128}", cookie):
+            upstream.close()
+            return self._simple_error(502, "display credential malformed")
+
+        config = {
+            "v": 1,
+            "display": self.server.display,
+            "auth": "MIT-MAGIC-COOKIE-1",
+            "cookie": cookie,
+            "generation": secrets.token_hex(8),
+            "max_frame": 1048576,
+            "max_streams": 64,
+            "max_queued_bytes": 16777216,
+        }
+        line = ("CLOUDY-X11-CONFIG 1 " +
+                json.dumps(config, separators=(",", ":")) + "\n").encode()
+        if len(line) > 4096:
+            upstream.close()
+            return self._simple_error(500, "configuration too large")
+
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "cloudy-x11")
+        self.send_header("Connection", "Upgrade")
+        self.end_headers()
+        self.close_connection = True
+        try:
+            self.wfile.write(line)
+            self.wfile.flush()
+        except OSError:
+            upstream.close()
+            return
+
+        self.connection.settimeout(600)
+        upstream.settimeout(600)
+        try:
+            while True:
+                ready, _, _ = select.select([self.connection, upstream], [], [], 600)
+                if not ready:
+                    break
+                for source in ready:
+                    data = source.recv(65536)
+                    if not data:
+                        return
+                    destination = upstream if source is self.connection else self.connection
+                    destination.sendall(data)
+        except OSError:
+            pass
+        finally:
+            upstream.close()
 
     def _proxy_http(self):
         length = int(self.headers.get("Content-Length") or 0)
@@ -197,10 +298,12 @@ class Handler(BaseHTTPRequestHandler):
 class Server(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, listen, upstream, token):
+    def __init__(self, listen, upstream, token, x11_tunnel_socket, display):
         host, port = listen
         self.upstream_host, self.upstream_port = upstream
         self.token = token
+        self.x11_tunnel_socket = x11_tunnel_socket
+        self.display = display
         super().__init__((host, port), Handler)
 
 
@@ -209,6 +312,9 @@ def main():
     ap.add_argument("--token-file", required=True)
     ap.add_argument("--listen", default="127.0.0.1:14500")
     ap.add_argument("--upstream", default="127.0.0.1:14501")
+    ap.add_argument("--x11-tunnel-socket",
+                    help="VM Unix tunnel (default: beside the token file)")
+    ap.add_argument("--display", default=":99")
     args = ap.parse_args()
     with open(args.token_file) as f:
         token = f.read().strip()
@@ -217,7 +323,10 @@ def main():
         sys.exit(1)
     host, port = args.listen.rsplit(":", 1)
     uhost, uport = args.upstream.rsplit(":", 1)
-    srv = Server((host, int(port)), (uhost, int(uport)), token)
+    tunnel_socket = args.x11_tunnel_socket or os.path.join(
+        os.path.dirname(os.path.abspath(args.token_file)), "x11-tunnel.sock")
+    srv = Server((host, int(port)), (uhost, int(uport)), token,
+                 tunnel_socket, args.display)
     print(f"[cloudy-x11-proxy] listening {args.listen} -> {args.upstream}", flush=True)
     srv.serve_forever()
 

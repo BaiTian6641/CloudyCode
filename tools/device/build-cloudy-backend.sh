@@ -60,6 +60,8 @@ cat > "$BASE/start-backend.sh" <<'SH'
 set -euo pipefail
 BASE="$HOME/.local/share/cloudy"
 TOKEN_FILE="$BASE/token"
+export DISPLAY=:99
+export XAUTHORITY="$BASE/Xauthority"
 mkdir -p "$BASE/data" "$BASE/extensions"
 if [ ! -s "$TOKEN_FILE" ]; then
   echo "missing $TOKEN_FILE - copy the start command from the Cloudy Code app first"
