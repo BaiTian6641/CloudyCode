@@ -1,6 +1,10 @@
 # Cloudy-X11 core and remote-console contract
 
-Status: target contract; extraction from the app is pending.
+Status: core transport/engine/AIDL extracted to the Android library module
+`android/cloudy-x11/core`; app depends on it. The native `libcloudy_x11_native.so`
+and XKB asset remain packaged by the app. VM scripts/setup and the remote-console
+contract are tracked. Cloudy Code pairing was verified via the backend
+environment (C2.4).
 
 ## Modules
 

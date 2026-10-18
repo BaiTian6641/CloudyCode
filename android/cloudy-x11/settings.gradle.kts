@@ -6,3 +6,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "cloudy-x11"
 include(":app")
+include(":core")

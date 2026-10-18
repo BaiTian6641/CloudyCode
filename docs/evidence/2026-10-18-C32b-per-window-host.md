@@ -408,3 +408,18 @@ is missing.
 a follow-up Ctrl+O attempt did not map a dialog host; the role-3 admission code
 is present but a true transient dialog has not been exercised. No claim is made
 that dialog behavior is verified.
+
+
+## C4 core module extraction
+
+- Added `android/cloudy-x11/core` (`com.android.library`, namespace
+  `dev.cloudy.x11.core`). Moved `EngineTunnel`, `X11Native` and
+  `ICloudyX11Engine.aidl` from the app to the library; `:app` depends on
+  `:core`.
+- Core AAR builds; app builds and installs; smoke test maps xeyes through the
+  moved AIDL/JNI/transport classes (`launchWindowHost output=2`,
+  `bindWindowSurface` returned true, frames presented).
+- The native `.so` and XKB asset remain app-packaged; a remote-console app must
+  ship the same native artifact and core AAR.
+- VM scripts/setup, Cloudy Code backend pairing (C2.4) and
+  `CORE-CONTRACT.md` cover the rest of C4 packaging.

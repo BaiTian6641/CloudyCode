@@ -21,6 +21,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation("androidx.webkit:webkit:1.14.0")
 }
 
