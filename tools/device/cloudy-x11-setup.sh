@@ -434,7 +434,7 @@ class Sessions:
                 f.write(f"exec {command}\n")
             os.chmod(wrapper, 0o700)
             cmd = [
-                "xpra", "start-desktop", f":{display}", "--daemon=yes",
+                "xpra", "start", f":{display}", "--daemon=yes",
                 f"--bind-tcp=127.0.0.1:{xpra_port}", "--html=on",
                 "--tcp-auth=none", "--mdns=no", "--notifications=no",
                 f"--xvfb={xvfb}", f"--dpi={self.dpi}",
@@ -458,20 +458,8 @@ class Sessions:
                 raise RuntimeError("xpra did not listen")
             app_env = os.environ.copy()
             app_env["DISPLAY"] = f":{display}"
-            rc = os.path.join(self.base, "openbox-rc.xml")
-            with open(rc, "w") as f:
-                f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
-                        '<openbox_config xmlns="http://openbox.org/3.4/rc">\n'
-                        '  <applications>\n'
-                        '    <application class="*"><decor>no</decor></application>\n'
-                        '  </applications>\n'
-                        '</openbox_config>\n')
             app_log_path = os.path.join(self.base, f"x11-app-{display}.log")
             app_log = open(app_log_path, "ab")
-            wm = subprocess.Popen(["/usr/bin/openbox", "--config-file", rc],
-                                  env=app_env, stdout=app_log, stderr=app_log,
-                                  start_new_session=True)
-            time.sleep(0.7)
             app = subprocess.Popen(["/bin/sh", wrapper], env=app_env,
                                    stdout=app_log, stderr=app_log,
                                    start_new_session=True)
@@ -501,7 +489,7 @@ class Sessions:
                     "port": proxy_port, "xpra_port": xpra_port,
                     "width": w, "height": h, "command": command,
                     "wrapper": wrapper, "app_pid": app.pid,
-                    "wm_pid": wm.pid, "fit_stop": fit_stop}
+                    "fit_stop": fit_stop}
             self.sessions[sid] = info | {"proxy_pid": proxy.pid}
             return {k: info[k] for k in ("id", "name", "display", "port")}
 
@@ -576,10 +564,6 @@ class Sessions:
             try:
                 os.killpg(os.getpgid(info["app_pid"]), signal.SIGTERM)
             except OSError:
-                pass
-            try:
-                os.kill(info["wm_pid"], signal.SIGTERM)
-            except (OSError, KeyError):
                 pass
             try:
                 subprocess.run(["xpra", "stop", info["display"]],
@@ -814,7 +798,25 @@ echo "own Googlebook window. The full desktop session is still DISPLAY=:100."
 echo "If nothing appears: journalctl --user -u cloudy-x11 -u cloudy-x11-proxy -u cloudy-x11-sessiond -n 40 --no-pager"
 
 # Apps launched from the Terminal connect to the shared Cloudy X display.
+# Terminal wrappers: an app command starts a per-app Cloudy session; the app
+# polls /list and opens the Googlebook OS window.
+cat > "$BASE/cloudy-firefox" <<'SH'
+#!/bin/sh
+TOKEN=$(cat "$HOME/.local/share/cloudy/x11-token")
+exec curl -fsS -H "Cookie: cloudy_x11=$TOKEN" -H "Content-Type: application/json" \
+  -d '{"app":"firefox"}' http://127.0.0.1:14509/start >/dev/null
+SH
+chmod +x "$BASE/cloudy-firefox"
+cat > "$BASE/cloudy-run" <<'SH'
+#!/bin/sh
+TOKEN=$(cat "$HOME/.local/share/cloudy/x11-token")
+exec curl -fsS -H "Cookie: cloudy_x11=$TOKEN" -H "Content-Type: application/json" \
+  -d "{\"app\":\"custom\",\"command\":\"$*\"}" http://127.0.0.1:14509/start >/dev/null
+SH
+chmod +x "$BASE/cloudy-run"
 BASHRC="$HOME/.bashrc"
 touch "$BASHRC"
 grep -q 'export DISPLAY=:100' "$BASHRC" 2>/dev/null || echo 'export DISPLAY=:100' >> "$BASHRC"
-grep -q 'alias firefox=' "$BASHRC" 2>/dev/null || echo "alias firefox='/usr/bin/firefox-esr'" >> "$BASHRC"
+sed -i '/alias firefox=/d' "$BASHRC" 2>/dev/null || true
+echo "alias firefox='$BASE/cloudy-firefox'" >> "$BASHRC"
+grep -q 'alias cloudy-run=' "$BASHRC" 2>/dev/null || echo "alias cloudy-run='$BASE/cloudy-run'" >> "$BASHRC"

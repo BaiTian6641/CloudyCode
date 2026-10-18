@@ -44,35 +44,31 @@ class X11AppsActivity : Activity() {
     private var probing = false
     private var watching = false
     private val opened = mutableSetOf<Int>()
+    private val openedSessions = mutableSetOf<Int>()
 
     private val watchRunnable = object : Runnable {
         override fun run() {
             if (!watching) return
             io.execute {
                 try {
-                    val res = get("/windows")
-                    val proxy = res.optInt("proxy", 14500)
-                    val arr = res.optJSONArray("windows")
-                    val current = mutableSetOf<Int>()
-                    val items = mutableListOf<JSONObject>()
-                    for (i in 0 until (arr?.length() ?: 0)) {
-                        val o = arr?.optJSONObject(i) ?: continue
-                        val id = o.optInt("id")
-                        if (id != 0) {
-                            current.add(id)
-                            items.add(o)
-                        }
-                    }
+                    val sessionRes = get("/list")
+                    val sessions = sessionRes.optJSONArray("sessions")
                     handler.post {
-                        opened.retainAll(current)
-                        for (o in items) {
-                            val id = o.optInt("id")
-                            if (id != 0 && opened.add(id)) openWindow(o, proxy)
+                        if (sessions != null) {
+                            for (i in 0 until sessions.length()) {
+                                val so = sessions.optJSONObject(i) ?: continue
+                                val p = so.optInt("port", 0)
+                                val name = so.optString("name", "Window")
+                                val sid = so.optString("id", "")
+                                if (p > 0 && openedSessions.add(p)) {
+                                    launchViewer(p, sid, name, false)
+                                }
+                            }
                         }
                         if (watching) handler.postDelayed(this, 2000)
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "window watch failed: ${e.message}")
+                    Log.w(TAG, "session watch failed: ${e.message}")
                     handler.post { if (watching) handler.postDelayed(this, 3000) }
                 }
             }
@@ -258,6 +254,7 @@ class X11AppsActivity : Activity() {
                 val name = result.optString("name", app)
                 handler.post {
                     if (!isFinishing) {
+                        openedSessions.add(port)
                         status.text = "Started $name."
                         launchViewer(port, sid, name, false)
                         probe()

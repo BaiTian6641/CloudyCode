@@ -58,6 +58,33 @@ Android freeform Task (one per app)
   screen changes.
 - The xterm preset uses a 13pt Xft font for readable physical-pixel text.
 
+
+## Dynamic window discovery (implemented)
+
+The desired UX — type an app in the VM Terminal and get a Googlebook OS window —
+is implemented through per-application sessions (not the shared base display):
+
+- The setup installs `cloudy-firefox` and `cloudy-run` in the VM and aliases
+  `firefox` to `cloudy-firefox` in `~/.bashrc`.
+- `cloudy-firefox` POSTs `{"app":"firefox"}` to the session daemon; the
+  daemon starts a dedicated xpra seamless session + token proxy + app.
+- The launcher polls `/list` every 2 s and opens one freeform viewer per new
+  session (title/name from the session), which loads the per-session proxy.
+- `cloudy-run <command>` starts a custom app the same way.
+- Verified: launcher Firefox preset -> session started on 14510 -> viewer
+  shows the Firefox window (screenshot). The Terminal alias invokes the same
+  `/start` and the same `/list` watcher.
+
+Remaining for the shared-display path (`DISPLAY=:100`, raw X apps): xpra
+rejects a second HTML5 client with "session busy" even with `--sharing=yes`
+and unique usernames; the per-window `/windows` viewer therefore stays disabled
+until multi-client sharing is resolved (or a native multiplexing client exists).
+The per-app wrapper path is the supported dynamic-window UX.
+
+Remaining polish: the per-app viewer's window-vs-app sizing (fit/black margin),
+background window discovery when the launcher is not resumed (foreground
+service), and per-window dialogs.
+
 ## Milestones
 
 1. **Goal + protocol spike** — done (this document).

@@ -298,7 +298,7 @@ class X11Activity : Activity() {
                             }
                             Log.d(TAG, "load port=$port width=$width")
                             webView.loadUrl("$origin/?floating_menu=no&autohide=yes" +
-                                "&border=no&video=no&encoding=png&sharing=yes&steal=no&username=cloudy_$windowId$override")
+                                "&border=no&video=no&encoding=png${if (windowId != null) "&sharing=yes&steal=no&username=cloudy_$windowId" else ""}$override")
                             loaded = true
                         }
                     } else {
