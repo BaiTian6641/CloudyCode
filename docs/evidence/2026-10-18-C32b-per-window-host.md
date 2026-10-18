@@ -154,3 +154,24 @@ The engine and session host are alive. No X client was observed in the final
 run because ADB text input landed in the session-host window, not the Terminal
 shell. The user must tap the Terminal prompt and run xeyes; this is an input
 focus issue, not an engine/task stub.
+
+
+## Overlay permission and live readiness
+
+The session host now exposes the documented **Display over other apps** setup
+(`SYSTEM_ALERT_WINDOW`), which is Android's user-grantable background-activity
+launch exemption. On-device:
+
+```text
+CloudyX11Session: overlayPermission=true
+CloudyX11Native: tunnel connected display=:99
+CloudyX11Native: onNativeWindow callback registered
+CloudyX11Native: native ready display=:99
+CloudyX11Renderer: renderer connected
+CloudyX11Renderer: windows committed
+```
+
+The VM base bridge returned `101` and the engine is alive. The final run still
+did not receive an xeyes client because injected text landed in the session-host
+window rather than the VM Terminal. Tap the Terminal prompt and run the command
+below; this is the sole remaining trigger.
