@@ -452,8 +452,12 @@ or adapt.
   GBCode/Cloudy Code are VM consumers. Keep the shipped xpra route as an
   interim demo only; stop extending the HTML5 viewer.
 
-### X1 — Engine smoke on the Googlebook
+### X1 — Standalone boundary and engine smoke on the Googlebook
 
+- Extract the GBCode-coupled prototype into `cloudy-x11-core`,
+  `cloudy-x11-app` and `cloudy-x11-vm`; remove the `GbCodeApp` token/Workbench
+  and xpra-specific dependencies from the X11 path. The standalone APK/service
+  is the test host from here on.
 - Build `LorieNative` for arm64-v8a with NDK 27.3.13750724 (pinned at
   `upstream/engine.lock.json`); start the native smoke host and one renderer.
 - Create one Android host Surface and paint one forwarded X client; prove no
@@ -495,11 +499,10 @@ or adapt.
   and observe client reflow; taskbar/Alt+Tab entries; closing one caption leaves
   the others; external display move/scale.
 
-### X4 — Standalone app, core and VM pairing
+### X4 — Standalone app integration and VM pairing
 
-- Split the prototype into `cloudy-x11-core`, the standalone `cloudy-x11-app`
-  APK and the `cloudy-x11-vm` guest package; remove the `GbCodeApp` token,
-  Workbench and xpra-specific dependencies from the X11 path.
+- Integrate the standalone app's setup/pairing, VM forwarder install, service
+  lifecycle and diagnostics; keep the core independent of GBCode/Cloudy Code.
 - Make the forwarding display the VM default for both the Terminal and the
   Cloudy Code backend; update setup/profile/systemd/backend launch; the Terminal
   graphics screen is not used for Cloudy-X11 apps.

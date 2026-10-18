@@ -112,8 +112,9 @@ release.
   from both a Terminal shell and Cloudy Code's integrated terminal; two
   independent windows.
 - X3: Android host (Surface, input, resize, close, dialogs).
-- X4: split `cloudy-x11-core`/`cloudy-x11-app`/`cloudy-x11-vm`; remove the
-  GbCodeApp token/Workbench and xpra-specific VM scripts; make the forwarding
-  display the VM default for Terminal and Cloudy Code; exercise the reusable
-  core with a second host (the future remote-console contract).
+- X1: split `cloudy-x11-core`/`cloudy-x11-app`/`cloudy-x11-vm`; remove the
+  GbCodeApp token/Workbench and xpra-specific VM scripts.
+- X4: make the forwarding display the VM default for Terminal and Cloudy Code;
+  integrate setup/pairing/lifecycle; exercise the reusable core with a second
+  host (the future remote-console contract).
 - S11: GPLv3 distribution/provenance review and corresponding-source offer.
