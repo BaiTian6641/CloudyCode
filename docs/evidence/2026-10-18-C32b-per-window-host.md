@@ -221,3 +221,17 @@ The setup asset was replaced with a 27 KB native-only installer. It:
 
 The APK asset and `tools/device/cloudy-x11-setup.sh` are identical. The native
 unit is independent of the old xpra HTML5 viewer.
+
+
+## Native-only v4 / weston clarification
+
+The 14500 bridge source now contains only the cookie-free HMAC ping and the
+authenticated `/x11-tunnel` Upgrade + raw pump. The xpra HTTP/HTML5 proxy,
+renderer viewport rewrite, and upstream proxy code are gone. Setup v4 is 22 KB,
+installs no xpra/sessiond/weston, stops/disables the old xpra and sessiond units,
+and writes the same Unix/cookie VM service and 14500 bridge.
+
+`weston.service` is a Google Terminal/Wayland desktop service, not part of
+Cloudy-X11. Its `failed to create compositor backend` error can occur
+independently; Cloudy-X11 X11 clients use `DISPLAY=:99` and the app's embedded X
+server, not weston. The setup does not install, start, or depend on weston.
