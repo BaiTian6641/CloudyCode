@@ -18,12 +18,13 @@ verified. The live VM unit is currently stale and needs the setup/repair rerun.
 
 - **Done/verified:** G1 native APK-UID binary probe; C2.5 14500 Unix/cookie
   bridge; G3 pinned-engine audit; C3.1 dedicated `:x11` engine/transport;
-  first VM xeyes pixels in a native Surface; Terminal package visibility;
-  target-only v4 setup/bridge/UI with no xpra/weston dependency; 16 KB native
-  gate.
-- **Implementation present, device proof pending:** one task per mapped
-  parentless XID; side-by-side session host; overlay permission; engine restart
-  and single-flight startup; clean-install XKB asset.
+  C3.2/C3.4 automatic per-X-window free-form hosts and live xeyes end-to-end;
+  v4 VM service (guest 101 log); Terminal package visibility; target-only v4
+  setup/bridge/UI with no xpra/weston dependency; 16 KB native gate.
+- **Implementation present, device proof pending:** resize/input/IME/close,
+  dialog/multi-window behavior and the free-form caption title.
+  (`onNativeWindow` now creates one task per mapped parentless XID; the Terminal
+  Weston compositor is filtered; launcher ready state is re-broadcast.)
 - **One-time VM blocker:** the live VM still has the old proxy/unit. v4 must be
   run once via the app's native **Set up X11** screen
   (`~/.local/share/cloudy/cloudy-x11-setup.sh`; v4, no xpra). The app cannot
@@ -154,8 +155,8 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
 
 - [x] Target-only v4 setup/bridge/UI source: no xpra, sessiond or weston
   install; old units stopped; native-only 14500 bridge; host test passes.
-- [ ] Run v4 on the live VM and verify the persistent service plus a fresh
-  xeyes native task. The live VM still has the old unit/state.
+- [x] Run v4 on the live VM and verify the persistent service plus a fresh
+  xeyes native task. Guest log 101, engine auto-host and pixels verified.
 
 ## T4 — Product integration and reuse
 

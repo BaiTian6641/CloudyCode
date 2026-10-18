@@ -243,3 +243,30 @@ The setup button now opens `SetupActivity` (no WebView, no xpra, no app picker).
 It copies the v4 command to the versioned path, opens Terminal, and is the only
 setup surface. The old `X11Activity` manifest entry was removed; the xpra viewer
 is not reachable from the app.
+
+
+## Live diagnosis: no auto window after v4 setup (fixed)
+
+- VM v4 was active: guest journal showed `[cloudy-x11-vm] app connected` and
+  `[cloudy-x11-bridge] "GET /x11-tunnel HTTP/1.1" 101`.
+- Engine reached `native ready display=:99`, mapped xeyes `0x20000a`, and the
+  renderer received frames. The missing piece was Java: `NativeEngineService`
+  did not override `X11Api.Callback.onNativeWindow`, so no host task was
+  created; the launcher also never got a ready state after a task restore.
+- Manual `NativePreviewActivity` run proved Surface binding (`bind surface
+  output=1 window=0x20000a`) and visible xeyes pixels.
+- Fix: each mapped top-level application/unclassified window allocates a
+  distinct output and opens one free-form `NativePreviewActivity` task; output
+  1 stays reserved for diagnostics. `onStartCommand(start)` re-broadcasts ready
+  when the engine is already running.
+- The Terminal's Weston Compositor top-level is excluded by title; it is the
+  bypassed graphics screen, not an application.
+- Live result: xeyes map 22:37:52.743 -> `launchWindowHost output=2
+  xid=0x20000a title=xeyes`, host 455x357, Surface bound, `present copied=1`
+  with nonblack eyes. No Weston host task. Launcher status:
+  "VM display connected. X11 windows open automatically."
+- Evidence: `/tmp/cloudy-x11-ctrlj.png`,
+  `/tmp/cloudy-x11-ready-status.png`.
+- Remaining cosmetic/behavior work for C3.3: the free-form caption still shows
+  the app label rather than the X window title, and input/resize/close/dialogs
+  are not yet wired.

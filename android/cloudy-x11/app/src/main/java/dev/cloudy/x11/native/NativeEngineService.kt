@@ -39,7 +39,9 @@ class NativeEngineService : Service(), X11Native.Callback {
     @Volatile private var windowKnown = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private val windowHosts = mutableMapOf<Int, Int>()
-    private var nextOutput = 1
+    // Output 1 is reserved for the legacy diagnostic preview. Per-window
+    // hosts start at 2 so a preview can never collide with a real XID output.
+    private var nextOutput = 2
 
     /**
      * Surface IPC from the host process. Native calls are always posted to the
@@ -190,7 +192,15 @@ class NativeEngineService : Service(), X11Native.Callback {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         log("onStartCommand action=${intent?.getStringExtra("action") ?: "start"} startId=$startId")
         when (intent?.getStringExtra("action") ?: "start") {
-            "start" -> startEngine()
+            "start" -> {
+                if (started) {
+                    // The Activity may have registered after onNativeReady was
+                    // first broadcast (for example after a task restore).
+                    notifyState("ready", "VM display connected. X11 windows open automatically.")
+                } else {
+                    startEngine()
+                }
+            }
             "accept" -> {
                 if (started) {
                     handler?.post {
@@ -342,9 +352,80 @@ class NativeEngineService : Service(), X11Native.Callback {
     override fun onNativeReady(display: String) {
         log("native ready display=:$display")
         readyLatch.countDown()
+        notifyState("ready", "VM display connected. X11 windows open automatically.")
         // Covers a ready signal that arrives after the startup wait expired.
         handler?.post { connectRendererOnHandler() }
     }
+
+    /**
+     * Engine callback runs on the X server thread. Every mapped top-level
+     * application/unclassified window gets a stable output and one free-form
+     * host task. The host Activity attaches its own Surface; this service only
+     * allocates the output and starts the task.
+     */
+    override fun onNativeWindow(
+        id: Int,
+        title: String?,
+        role: Int,
+        parent: Int,
+        width: Int,
+        height: Int,
+        mapped: Boolean,
+    ) {
+        if (!mapped || parent != 0 || id <= 0 || width <= 0 || height <= 0) return
+        // LORIE_WINDOW_APPLICATION=0, LORIE_WINDOW_UNCLASSIFIED=2.
+        if (role != 0 && role != 2) return
+        mainHandler.post {
+            if (windowHosts.containsKey(id)) return@post
+            val label = title?.takeIf { it.isNotBlank() } ?: "X11 window"
+            // The Terminal's Wayland graphics screen can expose its Weston
+            // compositor as an X top-level. That is the bypassed graphics
+            // screen, not an app window; never create a host for it.
+            if (label.contains("Weston Compositor", ignoreCase = true)) {
+                log("skip compositor host xid=0x${Integer.toHexString(id)} title=$label")
+                return@post
+            }
+            val output = nextOutput++
+            windowHosts[id] = output
+            launchWindowHost(id, output, label, width, height)
+        }
+    }
+
+    private fun launchWindowHost(
+        id: Int,
+        output: Int,
+        title: String,
+        xWidth: Int,
+        xHeight: Int,
+    ) {
+        val dm = resources.displayMetrics
+        val cascade = (windowHosts.size - 1).mod(5) * dp(28)
+        val left = dp(56) + cascade
+        val top = dp(96) + cascade
+        val width = (xWidth * dm.density).toInt()
+            .coerceIn(dp(280), (dm.widthPixels - left - dp(24)).coerceAtLeast(dp(280)))
+        val height = (xHeight * dm.density).toInt()
+            .coerceIn(dp(220), (dm.heightPixels - top - dp(80)).coerceAtLeast(dp(220)))
+        val right = (left + width).coerceAtMost(dm.widthPixels - dp(16))
+        val bottom = (top + height).coerceAtMost(dm.heightPixels - dp(64))
+        val options = ActivityOptions.makeBasic()
+            .setLaunchBounds(Rect(left, top, right, bottom))
+            .toBundle()
+        val intent = Intent(this, NativePreviewActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra("window_id", id)
+            .putExtra("output_id", output)
+            .putExtra("window_title", title)
+        try {
+            startActivity(intent, options)
+            log("launchWindowHost output=$output xid=0x${Integer.toHexString(id)} " +
+                "title=$title ${right - left}x${bottom - top}")
+        } catch (e: Throwable) {
+            log("launchWindowHost failed ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onBind(intent: Intent?): IBinder = engineBinder
 
