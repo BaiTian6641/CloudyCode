@@ -13,6 +13,16 @@ Every X top-level window becomes a native Googlebook OS window:
 This is the MobaXterm-style model, moved from a single virtual desktop canvas to
 one OS window per X window.
 
+**Direction update (2026-10-17):** the WM route below is reclassified as an
+interim per-app demo. A re-evaluation against MobaXterm establishes that xpra's
+HTML5/native clients cannot provide true per-window identity and native resize
+(no client→server resize packet), and that the Terminal app's built-in X11
+desktop is its own compositor. The target is an embedded X server in the app
+plus an X11 forwarding proxy in the VM, one Android host per X window family;
+see [x11-forwarding-evaluation.md](x11-forwarding-evaluation.md). The embeddable
+GPLv3 `magicdesk-x11` engine is the concrete candidate; license is the open
+decision. Do not invest further in the HTML5 viewer path.
+
 ## Protocol spike result (2026-10-17)
 
 Checked the xpra source and the HTML5 client:
@@ -94,9 +104,10 @@ service), and per-window dialogs.
    width → X screen resize → openbox/daemon re-maximise → app reflows.
 4. **Per-window dialogs/input** — per-window rendering for dialogs (filtered
    clients or the native client), pointer/keyboard routing, focus.
-5. **Native surface (optional replacement)** — native xpra client or X server
-   if the WM route cannot cover arbitrary clients; removes the WebView/canvas
-   dependency and gives exact app-window identity.
+5. **Embedded X server (target)** — replace the xpra/HTML5 surface with an
+   embedded X server in the app and an X11 forwarding proxy in the VM; one
+   Android host per X window family with native resize. The native xpra-client
+   variant is rejected for the resize requirement (see the evaluation).
 
 ## Acceptance gates
 
