@@ -56,7 +56,11 @@ static void on_window_size(const LorieWindowConstraints* constraints,
 }
 
 extern "C" void cloudy_x11_window_event(uint32_t id, const LorieWindowInfo* info) {
-    if (!g_vm || !g_callback || !g_window_callback) return;
+    if (!g_vm || !g_callback || !g_window_callback) {
+        LOGI("window event skipped vm=%d callback=%d method=%d",
+             g_vm != nullptr, g_callback != nullptr, g_window_callback != nullptr);
+        return;
+    }
     JNIEnv* env = nullptr;
     bool detach = false;
     if (g_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
@@ -113,6 +117,12 @@ Java_dev_cloudy_x11_native_X11Native_start(
     g_window_callback = env->GetMethodID(cls, "onNativeWindow",
         "(ILjava/lang/String;IIIIZ)V");
     env->DeleteLocalRef(cls);
+    if (!g_window_callback) {
+        LOGE("onNativeWindow callback lookup failed");
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    } else {
+        LOGI("onNativeWindow callback registered");
+    }
     if (!g_ready) {
         LOGE("callback is missing onNativeReady(String)");
         return JNI_FALSE;
