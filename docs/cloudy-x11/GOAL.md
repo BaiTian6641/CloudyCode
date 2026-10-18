@@ -115,11 +115,17 @@ app is extracted. Do not add new X11 features back into GBCode.
   `xdpyinfo` reaches the proxy/tunnel test harness at the local Xvfb (`X.Org
   21.1.16`). The VM rejects new TCP binds in the xpra/forwarding `145xx` range
   (`EADDRNOTAVAIL`), so the VM proxy tunnel is a **Unix socket**
-  (`$BASE/x11-tunnel.sock`); the app-facing bridge must go through the existing
-  14500 token proxy (Terminal-forwarded port), not a new TCP port. The
-  standalone app's setup asset now uses the Unix tunnel. Pending: the Cloudy Code
-  integrated-terminal env check, the Android tunnel/engine host, renderer/
-  per-window tasks and the standalone core API.
+  (`$BASE/x11-tunnel.sock`); the app-facing bridge goes through the existing
+  14500 token proxy (Terminal-forwarded port), not a new TCP port. The 14500
+  `/x11-tunnel` bridge is implemented and harness-verified; wrong token,
+  Upgrade and X11 auth fail closed. The Cloudy Code backend now starts with a
+  systemd drop-in carrying `DISPLAY=:99`/`XAUTHORITY`; its live process env was
+  verified. G1 proved the installed APK UID can complete an authenticated binary
+  transport to the existing 14509 control endpoint. G3 audited the pinned engine
+  (`docs/cloudy-x11/ENGINE-AUDIT.md`). Pending: G2 task/lifecycle behavior, the
+  dedicated native engine service, renderer/per-window tasks and core API.
+  The 145xx failure was an observed bind failure; do not restate it as a blanket
+  OS prohibition without rechecking address/family/namespace.
 - **Corrections:** `df86bbe` was reviewed but **not reverted**; the correction is
   forward. The shipped code is the per-app seamless/fit route, not the
   openbox/`start-desktop` WM route.
@@ -193,6 +199,9 @@ in `TODO.md`.
 
 ## References
 
+- `docs/cloudy-x11/ENGINE-AUDIT.md` — pinned engine process/JNI/renderer/window
+  contract audit (G3).
+- `docs/evidence/2026-10-18-cloudy-x11-G1-C25.md` — G1, C2.4 and C2.5 evidence.
 - `docs/plan/x11-forwarding-evaluation.md` — corrected architecture, current code
   check, VM-wide bypass, Cloudy Code pairing, stages and acceptance.
 - `docs/decisions/ADR-001-embedded-x11.md` — accepted GPLv3 engine decision.

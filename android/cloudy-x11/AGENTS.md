@@ -27,8 +27,9 @@ after context compaction or session recovery. The long-form design is
   145xx TCP binds.
 - Do not disable X11 auth (`-ac`) in production; the app engine gets the
   Xauthority cookie only over the authenticated tunnel.
-- Current phase: C2.4 (Cloudy Code terminal env) / C2.5 (14500 bridge), then
-  C3.1 engine bootstrap, C3.2 first free-form task. See NEXT-STEPS.
+- Current phase: G2 task/lifecycle probe, then C3.1 engine bootstrap and C3.2
+  first free-form task. C2.4/C2.5 are verified; read `ENGINE-AUDIT.md` before
+  adding JNI or renderer code.
 
 ## Build
 

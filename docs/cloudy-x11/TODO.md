@@ -5,9 +5,9 @@ The product goal and invariants are in `GOAL.md`; the detailed execution plan is
 [`NEXT-STEPS.md`](NEXT-STEPS.md). Read `android/cloudy-x11/AGENTS.md` before
 changing the standalone app.
 
-**Current phase:** T2 completion — C2.4 (Cloudy Code terminal env) and C2.5
-(14500 `/x11-tunnel` bridge) next; then T3 engine host. The VM display path is
-verified (see evidence).
+**Current phase:** G2 task/lifecycle probe, then C3.1 engine bootstrap. G1, C2.4,
+C2.5 and G3 are complete; the 14500 bridge and backend display environment are
+verified. The VM display path is verified; native engine/window hosting is not.
 
 ## T0 — Tracking and product boundary
 
@@ -65,12 +65,20 @@ installed with no X11 launcher; engine smoke X1a in `8666b25`.
   passed; a new shell shows `DISPLAY=:99`/the Cloudy Xauthority and reaches the
   display. TCP 145xx binds fail in this VM; the proxy tunnel is a Unix socket,
   bridged through the existing 14500 proxy for the app.
-- [ ] **C2.4** Cloudy Code integrated terminal: verify `DISPLAY=:99`/`XAUTHORITY`
-  and `xdpyinfo`; restart the backend if it predates the setup.
-- [ ] **C2.5** Add the 14500 `/x11-tunnel` raw HTTP Upgrade bridge to the VM Unix
-  tunnel; no new TCP port; test via the tunnel harness.
+- [x] **C2.4** Cloudy Code backend/extension-host display environment: systemd
+  drop-in sets `DISPLAY=:99`/`XAUTHORITY`; backend restart verified its env.
+  UI-driven integrated-terminal and extension-host GUI child remain follow-ups.
+- [x] **C2.5** 14500 `/x11-tunnel` raw Upgrade bridge implemented; harness-only
+  path reached the display; wrong cookie/upgrade and X11 auth fail closed; no
+  TCP X11 listener. Xvfb upstream is a harness, not the native engine.
 - [ ] App-facing tunnel/engine integration belongs to C3.1/C3.4.
-- [ ] Prove the app→VM route for native socket and WebView separately (S00.03).
+- [x] **G1** Native APK-UID authenticated binary probe passed 25 checks against
+  the existing 14509 control endpoint; not an X11/native-window proof.
+- [ ] **G2** Synthetic Android task/lifecycle probe: multiple identities,
+  title/icon, visibility/background launch, permission/interaction, close and
+  Surface recreation.
+- [x] **G3** Pinned engine API/process/renderer audit complete
+  (`docs/cloudy-x11/ENGINE-AUDIT.md`); no JNI/renderer code yet.
 - [ ] Verify stale backend/old `DISPLAY` detection and setup reruns.
 - [ ] Commit with device evidence.
 
@@ -117,6 +125,8 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C5.
 | 2026-10-17 | `8666b25` | Engine `lorie-smoke` starts on Googlebook under app UID. |
 | 2026-10-17 | `29b836b`/`6a8ef6e` | Forward corrections: standalone app, VM-wide display, stage order. |
 | 2026-10-17 | `8a13464` | VM `:99` display verified; Unix tunnel; TCP 145xx unavailable; fresh setup updated. |
+| 2026-10-18 | `bf75469` | 14500 X11 bridge + display cookie; Cloudy Code backend display env; setup sync. |
+| 2026-10-18 | `b363fdd` | G1 native APK-UID binary transport probe passed 25 checks. |
 
 ## Context recovery
 

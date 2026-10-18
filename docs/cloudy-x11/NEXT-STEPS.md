@@ -2,7 +2,8 @@
 
 **Status:** active execution plan. **Last updated:** 2026-10-17.
 **Read order after context compression:** [`GOAL.md`](GOAL.md) → [`TODO.md`](TODO.md)
-→ this file → [`android/cloudy-x11/AGENTS.md`](../../android/cloudy-x11/AGENTS.md)
+→ this file → [`ENGINE-AUDIT.md`](ENGINE-AUDIT.md) →
+[`android/cloudy-x11/AGENTS.md`](../../android/cloudy-x11/AGENTS.md)
 → [`../plan/x11-forwarding-evaluation.md`](../plan/x11-forwarding-evaluation.md)
 → [`../decisions/ADR-001-embedded-x11.md`](../decisions/ADR-001-embedded-x11.md).
 
@@ -19,10 +20,10 @@ stage.
 | Fresh install | Setup card embeds the 49 KB payload: apt/xauth, VM proxy, environment installer, systemd unit, tunnel harness, prototype service. |
 | VM display | `DISPLAY=:99`/`XAUTHORITY` installed; a new Terminal shell exports them; `xdpyinfo` reaches `:99` through the VM proxy + tunnel harness + Xvfb (`X.Org 21.1.16`). |
 | VM tunnel | Unix socket `$BASE/x11-tunnel.sock`; frame protocol O/D/C verified with a fake upstream; **new TCP binds in the 145xx range fail with `EADDRNOTAVAIL`**. |
-| App-facing path | Not implemented. The Android app cannot see the VM Unix socket; the existing 14500 token proxy must bridge a raw upgrade to it. |
-| Cloudy Code | Integrated-terminal `DISPLAY=:99`/display check not yet recorded; backend may predate the setup. |
-| Engine | `magicdesk-x11` pinned `65c3ced0`; `LorieNative`/`lorie-smoke` build; smoke starts on the Googlebook under the app UID (`native X11 ready :0`). Not integrated into the APK. |
-| Current app transport | Still the xpra/HTML5 prototype viewer; no per-X-window host. |
+| App-facing path | 14500 `/x11-tunnel` bridge implemented and harness-verified; G1 native APK transport probe passed. Native engine/renderer integration not implemented. |
+| Cloudy Code | Backend systemd drop-in sets `DISPLAY=:99`/`XAUTHORITY`; live backend env verified. UI integrated-terminal/extension-host child follow-up. |
+| Engine | `magicdesk-x11` pinned `65c3ced0`; `LorieNative`/`lorie-smoke` build; smoke starts under app UID. API/process audit complete (`ENGINE-AUDIT.md`); not integrated. |
+| Current app transport | Still the xpra/HTML5 prototype viewer; no per-X-window host. G1 probe is diagnostic, not the viewer replacement. |
 | Evidence | `8666b25` engine smoke; `3bb9d8e` T1 pairing + X Eyes; `5cc88f3` proxy/tunnel/setup; `8a13464` Unix display verification. |
 
 **MVP definition:** one X11 client launched from the VM becomes one resizable,
