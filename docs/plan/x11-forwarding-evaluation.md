@@ -2,9 +2,23 @@
 
 **Date:** 2026-10-17. **Status:** decision input, superseding the assumption that
 the xpra/HTML5 viewer path can be extended into freeform per-window X11. The
-implemented per-app WM route is retained only as an interim demo. This document
-is Googlebook-specific; generic AOSP/desktop results are controls, not target
-evidence.
+shipped per-app seamless route (`xpra start` + Xvfb + `_fit_window`) is retained
+only as an interim demo; the openbox/`start-desktop` WM route described in
+df86bbe was never implemented. This document is Googlebook-specific; generic
+AOSP/desktop results are controls, not target evidence.
+
+> **Forward correction after reviewing `df86bbe` (commit kept, not reverted).**
+> That commit was written from compacted context and is misleading in three
+> ways: (1) it described the openbox/`start-desktop` WM route as the current or
+> interim implementation, while the shipped code is the per-app seamless/fit
+> route; (2) it treated the Terminal's built-in graphics screen as merely
+> "Terminal-owned" and left routing to shell `.bashrc`/aliases, which cannot
+> capture arbitrary X clients or Cloudy Code's integrated terminals; (3) it
+> framed the X11 companion as optional and did not pair it with Cloudy Code's
+> Linux VM backend. The correct target is a **VM-wide forwarding display**
+> owned by Cloudy-X11: the Terminal's built-in X server is bypassed, not
+> extended, and both Terminal shells and Cloudy Code's backend use the Cloudy
+> display. The engine/ADR decision is retained; the correction is forward.
 
 ## Verdict
 
@@ -29,9 +43,50 @@ surfaces, individual window families, host-owned surfaces, input and icons, and
 it to present Linux applications in ordinary Android windows. [M2] [M3]
 
 **Recommendation (accepted in ADR-001):** pivot the Linux GUI surface to that
-embedded-X-server model. The Code - OSS workbench remains the Android-rendered
-main UI; this is an optional companion surface, not a Linux desktop frontend
-(see “Scope vs the existing plan”).
+embedded-X-server model. Cloudy-X11 becomes the single X11 forwarding endpoint
+for **both** the Terminal app's shells and Cloudy Code's Linux VM backend; the
+workbench itself remains the Android-rendered main UI. This is not a Linux
+desktop frontend and does not replace the workbench (see “Scope vs the existing
+plan”).
+
+### Product boundary: standalone Cloudy-X11
+
+Cloudy-X11 is a separate Googlebook APK, not a screen inside the GBCode
+workbench. It owns the X server/forwarding service, the VM pairing and setup,
+the per-window Googlebook tasks and the control/status UI. GBCode and Cloudy
+Code are VM-side consumers of the same display; neither is a dependency of
+Cloudy-X11, and Cloudy-X11 must not require the GBCode token, Workbench or
+Code-OSS code. The forwarding core is designed as a reusable component for a
+later remote-console app (see “Standalone app and reusable core”).
+
+### Current Cloudy-X11 implementation check (2026-10-17)
+
+The repository today contains a **prototype inside the GBCode app**, not the
+standalone product:
+
+- `dev.gbcode.app` is a single `app` Gradle module. `X11Activity` and
+  `X11AppsActivity` are activities in that package, with the `X11Launcher` alias;
+  there is no separate Cloudy-X11 APK/module.
+- Both activities obtain the per-install token from `GbCodeApp.x11Token()`;
+  the X11 UI is coupled to the GBCode application and its preferences.
+- The manifest sets `resizeableActivity="true"` for `X11Activity`, but there is
+  no multi-instance property and no per-window host; the launcher opens one
+  viewer per session.
+- The current VM payload is xpra-specific: `cloudy-x11-sessiond.py` starts
+  `xpra start` seamless sessions; `cloudy-x11-proxy.py` is an HTTP/token proxy
+  for the HTML5 client. Neither is an X11 protocol forwarder.
+- The setup exports `DISPLAY=:100` and per-app aliases in `~/.bashrc`; there is
+  no VM-wide display, no Cloudy Code backend environment, and no systemd user
+  environment. This is exactly why apps launched from other VM contexts still
+  land in the Terminal's graphics screen.
+- The embedded `magicdesk-x11` engine is built and has started on the Googlebook
+  under the app UID (X1a), but it is not integrated into the APK; there is no
+  renderer/per-window Surface host, no VM display proxy, and no tunnel client.
+
+So the prototype is useful evidence for the UI and the failure mode, but the
+standalone app requires a new module/service, a new VM forwarder, a VM-wide
+display contract, and the engine host. The xpra-specific proxy/sessiond and the
+per-app wrappers are replaced, not extended.
 
 ## What the user observed
 
@@ -55,10 +110,94 @@ have been launched from the Terminal's GUI surface. The per-app
 `cloudy-firefox`/`cloudy-run` wrappers start xpra sessions; they are not a display
 that arbitrary X clients can join.
 
-The target removes this ambiguity: the VM shell's `DISPLAY` points at the X11
-forwarding proxy, so any authenticated X client launched from any shell reaches
-the app's X server. The Terminal's graphics screen remains available for Google's
-own integration, but it is not the forwarding endpoint.
+The target removes this ambiguity: the VM's **default** `DISPLAY` points at the
+Cloudy-X11 forwarding proxy, so any authenticated X client launched from a
+Terminal shell, a script, an extension host, or Cloudy Code's integrated terminal
+reaches the app's X server. The Terminal's graphics screen remains available for
+Google's own integration, but it is **bypassed** for Cloudy-X11 clients; it is
+not the forwarding endpoint and cannot be extended by another app.
+
+## Bypassing the Terminal app's X server (VM-wide display)
+
+The key requirement is not to display the Terminal's screen better; it is to
+make the Terminal's built-in X server irrelevant to Cloudy-X11. A per-shell
+`.bashrc` export or a `firefox` alias is insufficient: it misses login shells,
+scripts, extension hosts, Cloudy Code's terminals and any process started before
+the setup. The design must own the VM's default display and Xauthority.
+
+### VM-wide environment
+
+The VM-side proxy owns display `:99` and a per-user Xauthority file. Export these
+to every relevant process:
+
+- `/etc/profile.d/cloudy-x11.sh` for login shells (bash, sh, zsh); source the
+  distribution-wide profile rather than editing each user's shell rc.
+- `~/.bashrc`/`~/.profile` as a user-level fallback and for interactive shells
+  that do not read the profile.
+- `/etc/environment` or PAM `pam_env` where the VM's GUI/session stack reads it.
+- `~/.config/environment.d/90-cloudy-x11.conf` and
+  `systemctl --user import-environment DISPLAY XAUTHORITY` for systemd user
+  services, so extension hosts/daemons started by systemd inherit the display.
+- Cloudy Code's backend: export the same variables in the Code-OSS server's
+  launch environment (service unit, bootstrap script, or user service), not only
+  in an interactive shell. Its integrated terminals and extension-host processes
+  inherit the server environment. Restart the backend after installing the
+  environment; an already-running server keeps its old `DISPLAY`.
+- Applications that hardcode a display or sanitize their environment need an
+  explicit wrapper; do not rely on a global export for those.
+
+The Terminal app may itself set `DISPLAY`/`WAYLAND_DISPLAY` for its shells or its
+computer-icon graphics screen. The shell profile/rc runs after the app-provided
+environment, so the Cloudy value must win for interactive shells; verify with
+`echo $DISPLAY`. If the Terminal app re-applies its value after the shell rc,
+use a shell wrapper or an explicit `env DISPLAY=:99 XAUTHORITY=... <app>` and
+report the platform behaviour; the computer-icon screen stays Google's and is
+not used for Cloudy-X11 apps.
+
+### Diagnostics and acceptance of the bypass
+
+In **both** a fresh Terminal shell and Cloudy Code's integrated terminal:
+
+```sh
+env | grep -E '^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY)='
+xauth list
+xeyes
+```
+
+Expected: `DISPLAY=:99`, the Cloudy Xauthority, and `xeyes` opens as a Googlebook
+task, not in the Terminal's graphics screen. If `xeyes` appears in the Terminal
+screen, the environment is not Cloudy-owned; fix the profile/backend launch
+before proceeding. The app must be running and its tunnel connected; otherwise
+X clients fail explicitly (the app shows a connection state) rather than falling
+back to the Terminal's display.
+
+## Cloudy Code pairing
+
+Cloudy Code is the Android workbench (WebView) with its Code - OSS/extension
+host and terminals running in the same Debian VM. It does not get a separate X11
+mechanism:
+
+- The Cloudy-X11 app is the X server/forwarder; the VM's display proxy and
+  Xauthority are the same ones used by the Terminal.
+- The Cloudy Code backend must be launched with `DISPLAY=:99`/`XAUTHORITY` (or
+  inherit them from the systemd user environment). Integrated terminals inherit
+  the backend environment; commands such as `firefox`, `xterm`, debug adapters
+  spawning GUI tools, and extension-launched GUI programs then reach Cloudy-X11.
+- The Cloudy Code workbench remains the main IDE window; X11 apps are separate
+  Googlebook tasks, exactly as in MobaXterm. Do not stream the workbench through
+  the X server.
+- Test the integrated terminal, a task/extension process and a script started
+  before/after the backend restart; a stale backend environment is the most
+  likely failure mode.
+
+### MobaXterm analogy, applied
+
+MobaXterm's remote X clients use a virtual display (`localhost:10.0`) forwarded
+over SSH to an embedded host X server. Here the VM proxy is the virtual display,
+the app-initiated authenticated tunnel is the forwarding channel, and the
+embedded X server in Cloudy-X11 is the host X server. Each X top-level becomes a
+free-form Googlebook task; Android window resize reaches the X client through
+`lorieOutputResize`, and no whole-display canvas or Terminal screen is involved.
 
 ## Googlebook OS platform contract
 
@@ -140,12 +279,15 @@ primary-source findings, not assumptions. [G1] [G2] [G4] [G5] [G6] [P01] [P04]
 The existing engineering plan deliberately keeps the Code - OSS workbench
 Android-rendered and does not use a Linux GUI as the frontend (§2.2, §6); it
 distinguishes the Terminal's alternative graphics screen from desktop-integrated
-X11 forwarding and does not require the latter for the workbench. [PLAN] This
-document adds an **optional companion Linux-GUI surface**; it does not replace
-the workbench, stream a Linux desktop as the main UI, or reopen the workbench's
-WebView/Electron decision. The relevant plan stages still apply:
+X11 forwarding and does not require the latter for the workbench. [PLAN] Those
+decisions remain. Cloudy-X11 is a **standalone app/product**, not an optional
+surface inside the GBCode workbench and not the workbench frontend. The
+workbench and Cloudy Code consume the same VM display; neither is a dependency
+of Cloudy-X11. The plan's S04/S09/S10/S11 acceptance patterns remain useful for
+Cloudy-X11's own window/input, VM lifecycle, security/performance and release
+work, but app ownership and packaging belong to Cloudy-X11:
 
-| Plan stage | Application to the companion |
+| Plan stage | Application to Cloudy-X11 |
 |---|---|
 | S00.01/S00.03 | Googlebook/Terminal source refresh; prove the app→VM route for native sockets and WebView before the tunnel. |
 | S04.01–S04.03 | Window/session manager, caption/insets, resize, multi-window, keyboard/IME/pointer/clipboard/drag-drop. |
@@ -189,16 +331,18 @@ Primary sources:
 
 ```mermaid
 flowchart LR
-    subgraph VM["Debian VM (Terminal)"]
-        A["X client: firefox, xterm, GIMP"]
-        B["X11 forwarding proxy<br/>DISPLAY=:99 + Xauthority"]
-        A --> B
+    subgraph VM["Debian VM (display :99)"]
+        A1["Terminal shells<br/>X clients"]
+        A2["Cloudy Code backend<br/>integrated terminal / extension GUI"]
+        B["cloudy-x11fw<br/>DISPLAY=:99 + Xauthority"]
+        A1 --> B
+        A2 --> B
     end
-    subgraph APP["Cloudy X11 app"]
+    subgraph APP["Cloudy-X11 app"]
         C["Tunnel endpoint<br/>(app-initiated control channel)"]
         D["Embedded X server<br/>LorieNative / magicdesk-x11"]
         E["Composite window families"]
-        F1["Googlebook task<br/>Firefox captions + content"]
+        F1["Googlebook task<br/>Firefox caption + content"]
         F2["Googlebook task<br/>dialog / second client"]
         T["System taskbar / Alt+Tab / caption"]
         C --> D
@@ -215,7 +359,9 @@ flowchart LR
 
 - A new `cloudy-x11fw` process owns display `:99`, creates
   `/tmp/.X11-unix/X99`, and a per-user Xauthority cookie. `DISPLAY=:99` and
-  `XAUTHORITY=...` are exported for interactive shells and wrappers.
+  `XAUTHORITY=...` are exported VM-wide (profile, environment.d, Code-OSS
+  backend launch), not only in interactive shells or aliases; this is what
+  bypasses the Terminal's built-in X server.
 - It accepts X11 client connections and multiplexes each as a byte stream to the
   app over the proven app-initiated connection (native WebSocket or framed
   stream). No X11 TCP listener is exposed. The app consumes each stream with
@@ -258,6 +404,30 @@ flowchart LR
 - The Terminal app's alternative graphics screen is Google's own UI; it is not
   modified or repurposed.
 
+### Standalone app and reusable core
+
+Cloudy-X11 is built as three layers so the later remote-console app can reuse it
+without the GBCode/Code-OSS workbench:
+
+1. **`cloudy-x11-core`** (Android library/service): the native X-server service
+   (engine lifecycle, renderer connection), the per-window host manager, the
+   tunnel/transport client, VM pairing/setup metadata and the input/clipboard/
+   resize/close command surface. It has no GBCode token, Workbench or Code-OSS
+   dependency.
+2. **`cloudy-x11-app`** (standalone Googlebook APK): setup/connection status,
+   the window-host Activities/tasks, service lifecycle, settings and diagnostics.
+   It is installable and usable with only the Linux VM and a Terminal shell.
+3. **`cloudy-x11-vm`** (guest package): the display proxy (`:99`, Xauthority),
+   VM-wide environment installer and systemd user service; the app connects to
+   it. It contains no UI and no Code-OSS/Cloudy Code dependency.
+
+The future remote-console app consumes `cloudy-x11-core` and the same VM
+forwarder contract; it supplies its own transport/session UI. The stable
+contract should cover session start/stop, X-window creation/removal, Surface
+binding, resize, input/IME, clipboard/drag/drop, close/force-close and
+connection state. A test host (the current debug Activities can be the
+prototype) verifies the contract without the GBCode app.
+
 ## Options and effort
 
 | Option | Meets per-window + native resize | Googlebook window model | Reuses | License | Relative effort | Verdict |
@@ -278,8 +448,9 @@ or adapt.
 
 - License/architecture decision: accepted, GPLv3 engine; see
   [ADR-001](../decisions/ADR-001-embedded-x11.md).
-- Scope: optional companion to the Android-rendered Code - OSS workbench; keep
-  the WM route as an interim demo; stop extending the HTML5 viewer.
+- Product boundary: Cloudy-X11 is a standalone app/core, not a GBCode screen;
+  GBCode/Cloudy Code are VM consumers. Keep the shipped xpra route as an
+  interim demo only; stop extending the HTML5 viewer.
 
 ### X1 — Engine smoke on the Googlebook
 
@@ -294,17 +465,21 @@ or adapt.
   forwarded client visible in a Googlebook task with the X title in the
   caption.
 
-### X2 — VM transport and Terminal routing
+### X2 — VM-wide display, Terminal + Cloudy Code routing
 
 - Implement `cloudy-x11fw` display `:99`, Xauthority, client accept, and stream
   multiplexing over the proven app→VM route.
+- Install the VM-wide environment: profile, environment.d, and the Cloudy Code
+  backend launch; verify the Terminal's shell and Cloudy Code's integrated
+  terminal both report `DISPLAY=:99`/the Cloudy `XAUTHORITY`.
 - Prove the route with a native socket and WebView separately (S00.03), then with
-  two X clients from a Terminal shell.
-- Resolve `DISPLAY` ownership: the Terminal app's graphics screen may override
-  the shell environment; document the working export/wrapper and verify
-  `echo $DISPLAY` against the proxy.
-- Gate: two independent X clients from the VM appear as two Googlebook tasks;
-  auth failure is explicit; no TCP X listener; Terminal close/reset behaviour is
+  two X clients from each of the Terminal shell and Cloudy Code's terminal.
+- Resolve `DISPLAY` ownership: if the Terminal app or an already-running
+  Code-OSS server keeps its old display, the shell/backend must be restarted or
+  wrapped; document the measured behavior.
+- Gate: `xeyes` from a fresh Terminal shell and from Cloudy Code's integrated
+  terminal both appear as Googlebook tasks (not in the Terminal graphics
+  screen); auth failure is explicit; no TCP X listener; Terminal close/reset is
   visible and recoverable.
 
 ### X3 — Googlebook per-window host
@@ -320,16 +495,21 @@ or adapt.
   and observe client reflow; taskbar/Alt+Tab entries; closing one caption leaves
   the others; external display move/scale.
 
-### X4 — Integration
+### X4 — Standalone app, core and VM pairing
 
-- Make the forwarding display the shell default; update setup/profile and
-  wrappers; the Terminal graphics screen is not used for companion apps.
-- Replace the xpra launcher/session path in the default UX; keep a debug
-  fallback; the Code - OSS workbench remains the main UI.
+- Split the prototype into `cloudy-x11-core`, the standalone `cloudy-x11-app`
+  APK and the `cloudy-x11-vm` guest package; remove the `GbCodeApp` token,
+  Workbench and xpra-specific dependencies from the X11 path.
+- Make the forwarding display the VM default for both the Terminal and the
+  Cloudy Code backend; update setup/profile/systemd/backend launch; the Terminal
+  graphics screen is not used for Cloudy-X11 apps.
 - Lifecycle: foreground service/notification policy, background/window retention,
-  VM unavailable/reconnect/reset, app update.
-- Gate: fresh VM Terminal → `firefox` → one Googlebook task; no alias required;
-  the workbench and X11 windows coexist without device-ownership duplication.
+  VM unavailable/reconnect/reset, app update, Cloudy Code backend restart.
+- Gate: a standalone APK (no GBCode installed/required) starts, pairs with the
+  VM, and opens `firefox` from a fresh Terminal shell and from Cloudy Code's
+  integrated terminal as two Googlebook tasks with no aliases; the core contract
+  is exercised by a second host; the workbench and X11 windows coexist without
+  device-ownership duplication.
 
 ### X5 — Acceptance and hardening
 
@@ -339,6 +519,9 @@ or adapt.
 
 ## Acceptance matrix
 
+- [ ] Cloudy-X11 installs and runs as a standalone APK without GBCode/Cloudy
+      Code: no GBCode token, Workbench or Code-OSS dependency in the X11 path;
+      the VM forwarder/core can be reused by the later remote-console app.
 - [ ] One free-form Googlebook task per mapped X top-level; no Linux desktop,
       wallpaper, WM frame or letterboxing inside the content area.
 - [ ] System caption shows the X title/icon; the taskbar and Alt+Tab list each
@@ -352,9 +535,15 @@ or adapt.
 - [ ] Keyboard, IME, pointer, hover, scroll, contextual cursors and drag/drop
       work; modal dialogs retain focus; OS-reserved shortcuts remain documented
       alternatives.
-- [ ] The Terminal's alternative graphics screen is not the endpoint; a fresh
-      Terminal shell exports the proxy `DISPLAY`/`XAUTHORITY` and `xeyes` reaches
-      the companion.
+- [ ] The Terminal's alternative graphics screen is not the endpoint: a fresh
+      Terminal shell and Cloudy Code's integrated terminal both export the proxy
+      `DISPLAY`/`XAUTHORITY`; `xeyes`/`firefox` from either becomes a Googlebook
+      task, not a Terminal-screen app.
+- [ ] The VM-wide environment survives new shells, systemd user services,
+      backend restarts and Cloudy Code terminals; a stale backend environment is
+      detected and reported, not silently falling back to the Terminal display.
+- [ ] The Terminal app's computer-icon graphics screen can still be used for
+      Google's own integration, but Cloudy-X11 never depends on it.
 - [ ] Terminal close/reopen, VM stop/reset, backend unavailable and app update
       produce an actionable state; no claim of window-independent VM lifetime.
 - [ ] No X11 TCP listener; per-session cookie; authenticated app→VM tunnel;
@@ -377,8 +566,13 @@ or adapt.
   connection; do not expose raw X11 TCP. S00.03's native/WebView tests are a
   hard gate.
 - **Terminal environment:** the Terminal app may set `DISPLAY` for its own
-  graphics screen; the companion needs an explicit export/wrapper. The
-  computer-icon screen cannot be redirected or extended.
+  graphics screen after the profile; the VM-wide export must win for shells, or
+  a wrapper is required. The computer-icon screen cannot be redirected or
+  extended. Test the real Terminal, not a generic Debian shell.
+- **Cloudy Code environment:** an already-running Code-OSS server keeps its old
+  environment; integrated terminals can therefore silently use the Terminal
+  display. The backend must be restarted/inherit the VM-wide env; the setup must
+  verify `DISPLAY` from the integrated terminal.
 - **VM lifetime:** window-independent VM persistence and launcher-integrated
   Linux GUI are roadmap; the app must recover when the Terminal/VM stops.
 - **Googlebook window semantics:** caption insets, content bounds, multi-instance
@@ -396,9 +590,9 @@ or adapt.
 ## Decision (accepted 2026-10-17)
 
 **Adopt the GPLv3 embedded X11 engine** (`magicdesk-x11`) and build the Android
-host and VM forwarding proxy. Consequences: the combined app becomes GPLv3; the
-current xpra WM route remains an interim demo; the permissive clean-room and
-per-app streaming paths are not selected. See
+host and VM-wide forwarding proxy. Consequences: the combined app becomes GPLv3;
+the shipped per-app seamless/fit route remains an interim demo; the permissive
+clean-room and per-app streaming paths are not selected. See
 [ADR-001](../decisions/ADR-001-embedded-x11.md). The X1a build/engine-start
 gate passed on the Googlebook; X1b (renderer/host) and X2 (VM transport) are
 next.

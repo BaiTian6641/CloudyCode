@@ -20,8 +20,11 @@ was **not implemented**. Both are interim. A re-evaluation against MobaXterm
 establishes that xpra's HTML5/native clients cannot provide true per-window
 identity and native resize (no client→server resize packet), and that the
 Terminal app's built-in X11 desktop is its own compositor. The target is an
-embedded X server in the app plus an X11 forwarding proxy in the VM, one Android
-host per X window family; see
+embedded X server in a **standalone Cloudy-X11 app/core** plus a **VM-wide**
+X11 forwarding display (`DISPLAY=:99`) used by both Terminal shells and Cloudy
+Code's Linux VM backend, so the Terminal's built-in graphics screen is bypassed;
+one Android host per X window family. GBCode/Cloudy Code are consumers, not
+dependencies, and the later remote-console app reuses the forwarding core. See
 [x11-forwarding-evaluation.md](x11-forwarding-evaluation.md). The embeddable
 GPLv3 `magicdesk-x11` engine is the chosen candidate
 ([ADR-001](../decisions/ADR-001-embedded-x11.md)); do not invest further in the
@@ -104,7 +107,10 @@ Remaining for the shared-display path (`DISPLAY=:100`, raw X apps): xpra
 rejects a second HTML5 client with "session busy" even with `--sharing=yes`
 and unique usernames; the per-window `/windows` viewer therefore stays disabled
 until multi-client sharing is resolved (or a native multiplexing client exists).
-The per-app wrapper path is the supported dynamic-window UX.
+The per-app wrapper path is the interim dynamic-window UX. It is per-shell and
+per-app; it cannot capture Cloudy Code's integrated terminals or arbitrary VM
+processes. The target is the VM-wide forwarding display described in the
+evaluation, with the Terminal's built-in graphics screen bypassed.
 
 Remaining polish: the per-app viewer's window-vs-app sizing (fit/black margin),
 background window discovery when the launcher is not resumed (foreground
