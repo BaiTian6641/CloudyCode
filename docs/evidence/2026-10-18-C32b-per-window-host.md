@@ -111,3 +111,17 @@ DISPLAY=:99 XAUTHORITY=$HOME/.local/share/cloudy/Xauthority xterm &
 
 Expected: two native window tasks, each with a distinct output/Surface; verify
 `window xid=...` callback pairs and task IDs.
+
+
+## Why the user's xeyes produced no window (2026-10-18)
+
+Post-run inspection found the main app process alive but **no
+`dev.cloudy.x11:x11` process**. The VM tunnel and base proxy were healthy
+(`/x11-tunnel` 101 previously), but the engine service had stopped after a
+tunnel-loss/failed start. xeyes connected to the VM display proxy, but no app
+engine was present to receive the O frame, so no window callback and no task
+were produced. The service must be restarted and ready **before** the client.
+
+Fix committed: `PerWindowSessionActivity` now requests the engine foreground
+service from `onCreate`, `onResume`, and `onNewIntent`, so reopening/bringing the
+session host restarts a dead engine. This is the path for the next check.

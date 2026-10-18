@@ -5,6 +5,7 @@ import android.app.ActivityManager
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -32,11 +33,31 @@ class PerWindowSessionActivity : Activity() {
             })
         }
         setContentView(root)
+        startEngine()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        startEngine()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        startEngine()
+    }
+
+    private fun startEngine() {
         try {
             startForegroundService(Intent(this, NativeEngineService::class.java)
                 .putExtra("action", "start"))
+            Log.i(TAG, "engine start requested")
         } catch (e: Exception) {
-            android.util.Log.w("CloudyX11Session", "engine start failed: ${e.message}")
+            Log.w(TAG, "engine start failed: ${e.message}")
         }
+    }
+
+    companion object {
+        private const val TAG = "CloudyX11Session"
     }
 }

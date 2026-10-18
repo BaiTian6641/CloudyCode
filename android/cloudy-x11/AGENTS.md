@@ -33,7 +33,9 @@ after context compaction or session recovery. The long-form design is
   G2 background launch remains unproven; the VM forward can disappear when
   Terminal is covered (502), and no VM client can be synthesized on Android.
   Verify `cloudy-x11-vm.service` uses `unix:$BASE/x11-tunnel.sock` and
-  `--cookie-file`; a stale unit can run yet return 502.
+  `--cookie-file`; a stale unit can run yet return 502. The session host now
+  restarts the `:x11` service on resume/new-intent; a dead engine yields no
+  window callback/task even if xeyes is running.
   Read `ENGINE-AUDIT.md` before JNI/renderer changes.
 - VM lifecycle: the Terminal VM/port forward can disappear when Terminal is
   hidden or the device reboots. Do not claim window-independent VM lifetime;
