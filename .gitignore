@@ -50,3 +50,7 @@ local.properties
 # Probe run artifacts (curated copies live in docs/evidence/)
 /tools/echo-server/results.jsonl
 /android/probes/**/local.properties
+
+# Generated pinned-engine JNI artifact; rebuild with
+# android/cloudy-x11 app preBuild or tools/device/build-x11-jni.sh.
+/android/cloudy-x11/app/src/main/jniLibs/

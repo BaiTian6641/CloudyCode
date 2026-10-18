@@ -24,6 +24,9 @@ stage.
 | Cloudy Code | Backend systemd drop-in sets `DISPLAY=:99`/`XAUTHORITY`; live backend env verified. UI integrated-terminal/extension-host child follow-up. |
 | Engine | `magicdesk-x11` pinned `65c3ced0`; `LorieNative`/`lorie-smoke` build; smoke starts under app UID. API/process audit complete (`ENGINE-AUDIT.md`); not integrated. |
 | Current app transport | Still the xpra/HTML5 prototype viewer; no per-X-window host. G1 probe is diagnostic, not the viewer replacement. |
+| Native engine path | Dedicated `:x11` FGS owns tunnel/engine; VM `xdpyinfo :99` reached embedded X.Org 21.1.99. No Surface/renderer (C3.2). |
+| 16 KB | JNI/APK 16 KB aligned and zipaligned; `tools/device/verify-16kb.sh` passes. NDK 27.3 explicit linker flags. |
+| G2 | Visible two tasks, bounds/title updates verified; HOME+16 s launch calls did not create activities; denial mechanism not captured. |
 | Evidence | `8666b25` engine smoke; `3bb9d8e` T1 pairing + X Eyes; `5cc88f3` proxy/tunnel/setup; `8a13464` Unix display verification. |
 
 **MVP definition:** one X11 client launched from the VM becomes one resizable,

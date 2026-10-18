@@ -5,9 +5,10 @@ The product goal and invariants are in `GOAL.md`; the detailed execution plan is
 [`NEXT-STEPS.md`](NEXT-STEPS.md). Read `android/cloudy-x11/AGENTS.md` before
 changing the standalone app.
 
-**Current phase:** G2 task/lifecycle probe, then C3.1 engine bootstrap. G1, C2.4,
-C2.5 and G3 are complete; the 14500 bridge and backend display environment are
-verified. The VM display path is verified; native engine/window hosting is not.
+**Current phase:** C3.2 CPU presenter/Surface after the C3.1 native path passed.
+G1, C2.4, C2.5, G3 and C3.1 are complete; G2 is partially verified (visible task
+identity/bounds/title; background launch unproven). The embedded engine is now
+reachable from the VM through the APK; no Android Surface/per-window host yet.
 
 ## T0 — Tracking and product boundary
 
@@ -74,9 +75,10 @@ installed with no X11 launcher; engine smoke X1a in `8666b25`.
 - [ ] App-facing tunnel/engine integration belongs to C3.1/C3.4.
 - [x] **G1** Native APK-UID authenticated binary probe passed 25 checks against
   the existing 14509 control endpoint; not an X11/native-window proof.
-- [ ] **G2** Synthetic Android task/lifecycle probe: multiple identities,
-  title/icon, visibility/background launch, permission/interaction, close and
-  Surface recreation.
+- [ ] **G2** Synthetic Android task/lifecycle probe: visible two-task identity,
+  bounds and dynamic title verified. Background/obscured creation, permission,
+  Terminal/Cloudy Code triggers, icon/taskbar/Recents/Alt+Tab, close and Surface
+  recreation remain unproven (`docs/evidence/2026-10-18-G2-task-probe.md`).
 - [x] **G3** Pinned engine API/process/renderer audit complete
   (`docs/cloudy-x11/ENGINE-AUDIT.md`); no JNI/renderer code yet.
 - [ ] Verify stale backend/old `DISPLAY` detection and setup reruns.
@@ -86,8 +88,14 @@ installed with no X11 launcher; engine smoke X1a in `8666b25`.
 
 Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C3.
 
-- [ ] **C3.1** Native tunnel service/JNI bootstrap: start `LorieNative`, renderer,
-  consume tunnel fds with `lorieServerAcceptClient`; app UID, no `-ac`.
+- [x] **C3.1** Native tunnel service/JNI bootstrap: dedicated `:x11` foreground
+  service, 14500 tunnel, `FamilyWild` Xauthority, `LorieNative :99`; VM
+  `xdpyinfo` returned X.Org 21.1.99 through `lorieServerAcceptClient`; explicit
+  stop/restart and force-stop teardown verified. Renderer/Surface is C3.2.
+- [ ] **C3.2** CPU `LorieGraphics` + ANativeWindow Surface, first known pixels,
+  then `xeyes`; 16 KB aligned JNI is a build gate.
+- [ ] **16 KB gate** every native artifact: ELF LOAD `0x4000`, APK
+  `zipalign -c -P 16` (`tools/device/verify-16kb.sh`). Verified for C3.1.
 - [ ] **C3.2** Renderer/`LorieGraphics` (software first) + first free-form
   Googlebook task/Surface; `xeyes` visible.
 - [ ] **C3.3** Resize/input/IME/close/title/icon, multi-window/dialogs.
@@ -127,6 +135,8 @@ Detailed plan: [`NEXT-STEPS.md`](NEXT-STEPS.md) §C5.
 | 2026-10-17 | `8a13464` | VM `:99` display verified; Unix tunnel; TCP 145xx unavailable; fresh setup updated. |
 | 2026-10-18 | `bf75469` | 14500 X11 bridge + display cookie; Cloudy Code backend display env; setup sync. |
 | 2026-10-18 | `b363fdd` | G1 native APK-UID binary transport probe passed 25 checks. |
+| 2026-10-18 | pending | C3.1 VM `xdpyinfo` through APK into embedded X.Org 21.1.99; 16 KB JNI/APK verified. |
+| 2026-10-18 | pending | G2 visible tasks/title/bounds verified; background launch remains unproven. |
 
 ## Context recovery
 

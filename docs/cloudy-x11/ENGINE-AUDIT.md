@@ -139,3 +139,25 @@ policy. Do not introduce a guest desktop to hide host window-management gaps.
 **Status:** static audit complete (G3). No JNI or renderer code exists yet;
 `lorie-smoke` does not prove rendering, accepted-fd authentication, or window
 hosting.
+
+
+## Verified integration (C3.1)
+
+- Pinned server starts with exactly `:99 -noreset -nolisten tcp -auth <file>`
+  plus `-legacy-drawing -disable-gpu-present -disable-dri3`; `-screen` is not a
+  supported generic option at this pin. The smoke-proven form does not need
+  `-displayfd`; the ready callback reports the display.
+- `MAGICDESK_X11_HOST_WM=1` is set before startup for the per-application EWMH
+  bridge. No conflicting WM is present in the current test.
+- A dedicated `:x11` foreground service owns the tunnel and engine. The app
+  writes a valid binary Xauthority with a `FamilyWild` MIT-MAGIC-COOKIE-1 record
+  from the bridge config; `-ac` is never used.
+- A VM `xdpyinfo :99` traversed VM proxy → Unix tunnel → 14500 bridge → APK
+  tunnel → `lorieServerAcceptClient` and returned the embedded `X.Org 21.1.99`.
+  The app logs confirm accepted fd admission. Renderer, `LorieConnection`,
+  Surface and window callbacks remain C3.2.
+- JNI receiver declarations are instance methods (`jobject` second argument),
+  and the JNI strings are released after the synchronous `strdup`/`setenv`
+  copies. Earlier corrupted option text was the pin's fatal-logger `va_list`
+  misuse plus the unsupported `-screen`, not an argv lifetime bug.
+- Native artifacts link with 16 KB page flags and pass ELF/APK verification.
