@@ -175,3 +175,14 @@ The VM base bridge returned `101` and the engine is alive. The final run still
 did not receive an xeyes client because injected text landed in the session-host
 window rather than the VM Terminal. Tap the Terminal prompt and run the command
 below; this is the sole remaining trigger.
+
+
+## Simplified wait-for-window UI
+
+The user-facing launcher is reduced to a status line, **Open Terminal**, and a
+one-time **Set up X11** action. The preset launcher, custom-command box, full
+desktop and native-session controls are removed from the default screen. The
+engine starts automatically on resume and remains waiting; the native engine
+logs show `native ready :99`, `renderer connected`, `windows committed`. The VM
+X11 window is expected to arrive from an ordinary Terminal launch; the app does
+not require an in-app app picker.

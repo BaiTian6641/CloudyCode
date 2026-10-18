@@ -364,10 +364,9 @@ class X11Activity : Activity() {
     private fun showSetup(text: String) {
         setupView.visibility = View.VISIBLE
         status.text = text
-        detail.text = "The setup installs the VM-wide X11 display (:99), the display " +
-            "proxy/app tunnel, Xauthority and the current prototype session service. " +
-            "Run it once in the Terminal; new shells and Cloudy Code inherit DISPLAY=:99. " +
-            "Keep the Terminal app open."
+        detail.text = "Cloudy X11 needs a one-time setup in the Linux Terminal. " +
+            "Tap Copy setup command, paste it into Terminal and run it. " +
+            "After it finishes, return here and open any X11 app from Terminal."
     }
 
     private fun copySetupCommand() {
@@ -380,8 +379,8 @@ class X11Activity : Activity() {
             putBoolean("android.content.extra.IS_SENSITIVE", true)
         }
         clipboard.setPrimaryClip(clip)
-        detail.text = "Setup command copied (script + this app's X11 token). Paste it in the " +
-            "Terminal and run it once (sudo)."
+        detail.text = "Setup command copied. Paste it into Terminal and press Enter. " +
+            "This one-time setup installs the display service."
     }
 
     private fun openTerminal() {

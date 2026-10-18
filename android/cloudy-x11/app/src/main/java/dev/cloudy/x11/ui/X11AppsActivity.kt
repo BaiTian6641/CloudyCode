@@ -112,10 +112,9 @@ class X11AppsActivity : Activity() {
         if (Settings.canDrawOverlays(this) || overlayPrompted) return
         overlayPrompted = true
         AlertDialog.Builder(this)
-            .setTitle("Allow new-window tasks")
-            .setMessage("Cloudy-X11 needs the Display over other apps permission " +
-                "so a new X11 window can open while the Terminal stays focused. " +
-                "This is a one-time Android permission; no accessibility service is used.")
+            .setTitle("Allow app windows")
+            .setMessage("Allow Cloudy X11 to open app windows while Terminal stays open. " +
+                "This is a one-time Android setting.")
             .setPositiveButton("Allow") { _, _ ->
                 try {
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -186,11 +185,7 @@ class X11AppsActivity : Activity() {
         if (nativeProbe) return
         startNativeEngine()
         maybeRequestOverlayPermission()
-        probe()
-        if (!watching) {
-            watching = true
-            handler.post(watchRunnable)
-        }
+        status.text = "X11 display is starting. Open an X11 app from Terminal."
     }
 
     override fun onPause() {
@@ -209,7 +204,7 @@ class X11AppsActivity : Activity() {
     private fun buildUi(): View {
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(56, 48, 56, 48)
+            setPadding(dp(32), dp(32), dp(32), dp(32))
             setBackgroundColor(getColor(R.color.cw_canvas))
         }
         col.addView(TextView(this).apply {
@@ -217,74 +212,48 @@ class X11AppsActivity : Activity() {
             textSize = 28f
             setTextColor(getColor(R.color.cw_text_primary))
         })
-        col.addView(TextView(this).apply {
-            text = "Each application opens in its own Googlebook window."
+        status = TextView(this).apply {
+            text = "Starting the X11 display…"
             textSize = 15f
             setTextColor(getColor(R.color.cw_text_secondary))
-            setPadding(0, 8, 0, 24)
-        })
-        status = TextView(this).apply {
-            text = "Checking the session service…"
-            textSize = 14f
-            setTextColor(getColor(R.color.cw_text_secondary))
-            setPadding(0, 0, 0, 16)
+            setPadding(0, 12, 0, 20)
         }
         col.addView(status)
-
-        presetButtons = presets.map { preset ->
-            Button(this).apply {
-                text = preset.label
-                isEnabled = false
-                setOnClickListener { startApp(preset.app, null) }
-            }.also {
-                col.addView(it, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT))
-            }
-        }
-
         col.addView(TextView(this).apply {
-            text = "Custom command"
-            textSize = 14f
-            setTextColor(getColor(R.color.cw_text_secondary))
-            setPadding(0, 24, 0, 8)
+            text = "Open an X11 app from the Linux Terminal. Its window will appear here automatically."
+            textSize = 15f
+            setTextColor(getColor(R.color.cw_text_primary))
         })
-        custom = EditText(this).apply {
-            hint = "e.g. gimp, libreoffice, python3 -m idlelib"
-            setSingleLine(true)
-        }
-        col.addView(custom, LinearLayout.LayoutParams(
+        col.addView(Button(this).apply {
+            text = "Open Terminal"
+            setOnClickListener { openTerminal() }
+        }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT))
         col.addView(Button(this).apply {
-            text = "Launch command"
-            isEnabled = false
-            setOnClickListener {
-                val cmd = custom.text.toString().trim()
-                if (cmd.isEmpty()) Toast.makeText(
-                    this@X11AppsActivity, "Enter a command", Toast.LENGTH_SHORT).show()
-                else startApp("custom", cmd)
-            }
-        }.also { presetButtons = presetButtons + it })
-
-        col.addView(View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(1, 24)
-        })
-        col.addView(Button(this).apply {
-            text = "Full Linux desktop"
-            setOnClickListener { launchViewer(14500, null, "Linux desktop", false) }
-        })
-        col.addView(Button(this).apply {
-            text = "Native X11 session (per-window)"
-            setOnClickListener { startPerWindowSession() }
-        })
-        col.addView(Button(this).apply {
-            text = "X11 setup / repair"
+            text = "Set up X11 (one time)"
             setOnClickListener { launchViewer(14500, null, "Cloudy X11 setup", true) }
-        })
-        setPresetsEnabled(false)
-
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT))
         return ScrollView(this).apply { addView(col) }
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
+    private fun openTerminal() {
+        val launch = packageManager.getLaunchIntentForPackage(
+            "com.android.virtualization.terminal")
+        if (launch == null) {
+            status.text = "The Linux Terminal app is not installed."
+            return
+        }
+        try {
+            startActivity(launch)
+        } catch (e: Exception) {
+            status.text = "Could not open Terminal: ${e.message}"
+        }
     }
 
     private fun setPresetsEnabled(enabled: Boolean) {

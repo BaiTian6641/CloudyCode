@@ -25,7 +25,7 @@ class PerWindowSessionActivity : Activity() {
         setTaskDescription(ActivityManager.TaskDescription("Cloudy X11 session"))
         val status = TextView(this).apply {
             tag = "overlay-status"
-            text = "Overlay permission: required for automatic tasks"
+            text = "Allow app windows to open automatically"
             textSize = 14f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -50,9 +50,7 @@ class PerWindowSessionActivity : Activity() {
             setPadding(32, 32, 32, 32)
             setBackgroundColor(Color.BLACK)
             addView(TextView(this@PerWindowSessionActivity).apply {
-                text = "Cloudy X11\nPer-window session active\n\n" +
-                    "New X11 windows need the Display-over-other-apps " +
-                    "permission so they can appear while Terminal stays open."
+                text = "Cloudy X11 is running.\nOpen an X11 app from Terminal."
                 textSize = 16f
                 setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
@@ -71,8 +69,8 @@ class PerWindowSessionActivity : Activity() {
         val granted = Settings.canDrawOverlays(this)
         Log.i(TAG, "overlayPermission=$granted")
         window.decorView.findViewWithTag<TextView>("overlay-status")?.text =
-            if (granted) "Overlay permission: granted"
-            else "Overlay permission: required for automatic tasks"
+            if (granted) "Ready to open app windows"
+            else "Allow app windows to open automatically"
     }
 
     override fun onNewIntent(intent: Intent) {
