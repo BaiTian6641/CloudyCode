@@ -599,6 +599,16 @@ if [ "$SYSTEM" = 1 ]; then
     | sudo tee /etc/profile.d/cloudy-x11.sh >/dev/null
   echo "installed /etc/profile.d/cloudy-x11.sh"
 fi
+
+# The Cloudy Code backend may have started before the environment.d update.
+# Restart it once so its integrated terminal and child processes inherit :99.
+if systemctl --user is-active cloudy-backend.service >/dev/null 2>&1; then
+  pid=$(systemctl --user show -p MainPID --value cloudy-backend.service 2>/dev/null)
+  if [ -n "$pid" ] && ! tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -q '^DISPLAY=:99$'; then
+    systemctl --user restart cloudy-backend.service 2>/dev/null || true
+    echo "restarted Cloudy Code backend to pick up DISPLAY=:99"
+  fi
+fi
 cat > "$HOME/.config/systemd/user/cloudy-x11-vm.service" <<EOF
 [Unit]
 Description=Cloudy-X11 VM display proxy (:99)
