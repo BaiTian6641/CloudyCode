@@ -199,7 +199,19 @@ class X11AppsActivity : Activity() {
         if (probing) return
         probing = true
         io.execute {
-            val ok = verifyChallenge()
+            // The authenticated /list is the readiness gate: it proves the
+            // per-install token in the same way the session watcher does. The
+            // HMAC challenge remains a diagnostic because a service can have a
+            // working cookie path while its ping endpoint is stale.
+            val challenge = verifyChallenge()
+            val ok = try {
+                get("/list")
+                true
+            } catch (e: Exception) {
+                Log.w(TAG, "session list probe failed: ${e.message}")
+                false
+            }
+            if (!challenge && ok) Log.w(TAG, "HMAC challenge failed but /list is authenticated")
             handler.post {
                 probing = false
                 if (isFinishing) return@post

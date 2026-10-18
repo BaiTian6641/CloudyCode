@@ -96,6 +96,12 @@ app is extracted. Do not add new X11 features back into GBCode.
   existing xpra/HTML5 prototype as a temporary carrier; this is not the target
   transport. The VM still has the previous GBCode token, so the standalone
   launcher shows setup required until the new app's setup command is run.
+- **Prototype pairing verified:** the standalone token was written to the VM's
+  `x11-token` and the sessiond/proxy/X11 services restarted. The launcher now
+  reads "Ready — pick an application"; X Eyes started session `14510` and
+  rendered in the standalone app (`/tmp/cloudy-x11-xeyes2.png`). Readiness uses
+  the authenticated `/list` (the HMAC ping remains diagnostic). This is the
+  xpra prototype, not the target per-window path.
 - **Current prototype:** `dev.gbcode.app` has `X11Activity`/`X11AppsActivity`,
   a per-install token from `GbCodeApp`, and the VM setup asset. The VM payload
   uses xpra sessions plus an HTTP/token proxy and per-shell `.bashrc` aliases.

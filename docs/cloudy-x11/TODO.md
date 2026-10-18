@@ -28,10 +28,10 @@ GBCode debug APK (59 MB) builds with no X11 references; standalone installed as
 
 - [x] APK builds with the existing xpra/HTML5 prototype and launches on the
   Googlebook; it is independent of GBCode code/packages.
-- [ ] App token/setup card installs the VM prototype; the launcher probe passes
-  after re-running the setup with the standalone app's token. **Pending:** the
-  VM currently holds the previous GBCode token; the standalone launcher reports
-  "Session service not reachable" and offers X11 setup/repair, as expected.
+- [x] App token/setup card installs the VM prototype; the launcher probe passes
+  after re-running the setup with the standalone app's token. The standalone
+  token was written to the VM `x11-token`; the sessiond/proxy/X11 services
+  restarted; `/list` returns 200; the launcher reads "Ready".`
 - [x] No `dev.gbcode.app` imports, `GbCodeApp` token, Workbench or Code-OSS
   dependency in the standalone source.
 - [x] Launcher/diagnostics/status UI; the prototype sessions still use the
@@ -43,10 +43,10 @@ GBCode debug APK (59 MB) builds with no X11 references; standalone installed as
 
 **Evidence:** standalone `assembleDebug` status 0 (3.5 MB); GBCode
 `assembleDebug` status 0 (59 MB, no X11 refs); install/launch `dev.cloudy.x11`
-in free-form task; screenshot `/tmp/cloudy-x11-standalone.png`; launcher logs
-`session watch failed: HTTP 403` because the VM token is still the old one;
-GBCode release-signed update installed with no X11 launcher; engine smoke X1a in
-`8666b25`.
+in free-form task; screenshot `/tmp/cloudy-x11-standalone.png`; VM token updated
+to the standalone token; sessiond `/list` 200; X Eyes session `14510` in the
+standalone app (`/tmp/cloudy-x11-xeyes2.png`); GBCode release-signed update
+installed with no X11 launcher; engine smoke X1a in `8666b25`.
 
 ## T2 — VM-wide forwarding (next)
 
