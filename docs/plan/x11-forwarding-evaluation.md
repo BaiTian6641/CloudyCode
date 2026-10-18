@@ -61,8 +61,15 @@ later remote-console app (see “Standalone app and reusable core”).
 
 ### Current Cloudy-X11 implementation check (2026-10-17)
 
-The repository today contains a **prototype inside the GBCode app**, not the
-standalone product:
+> **Extraction status:** after this check, the prototype was extracted to
+> `android/cloudy-x11` (`dev.cloudy.x11`) and installed as a separate
+> free-form task; the GBCode X11 activities/launcher/token/assets were removed.
+> The standalone app still carries the xpra/HTML5 prototype; VM pairing and the
+> engine host are the next gates. The check below records the pre-extraction
+> code and why the split was required.
+
+The repository previously contained a **prototype inside the GBCode app**, not
+the standalone product:
 
 - `dev.gbcode.app` is a single `app` Gradle module. `X11Activity` and
   `X11AppsActivity` are activities in that package, with the `X11Launcher` alias;

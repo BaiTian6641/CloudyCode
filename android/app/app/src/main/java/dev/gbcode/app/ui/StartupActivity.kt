@@ -95,9 +95,6 @@ class StartupActivity : Activity() {
             startActivity(Intent(this, WorkbenchActivity::class.java))
             finish()
         }
-        findViewById<Button>(R.id.x11Windows).setOnClickListener {
-            startActivity(Intent(this, X11Activity::class.java))
-        }
         advanced.setOnClickListener {
             startActivity(Intent(this, OnboardingActivity::class.java))
             finish()

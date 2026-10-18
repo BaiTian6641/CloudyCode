@@ -12,28 +12,37 @@ The product goal and invariants are in `GOAL.md`. Read
 - [x] Record the standalone-app boundary, VM-wide display, Terminal bypass,
   Cloudy Code pairing and reusable core in the evaluation/ADR/goal.
 - [x] Create persistent `GOAL.md`, this TODO and the module `AGENTS.md`.
-- [ ] Commit the tracking documents.
-- [ ] Create `android/cloudy-x11` as a separate Gradle application project
+- [x] Commit the tracking documents (`a025eb9`).
+- [x] Create `android/cloudy-x11` as a separate Gradle application project
   (`dev.cloudy.x11`) with its own token store.
-- [ ] Move the X11 prototype activities/resources/icon/VM setup asset into it.
-- [ ] Remove X11 activities, launcher entry, token method and assets from the
+- [x] Move the X11 prototype activities/resources/icon/VM setup asset into it.
+- [x] Remove X11 activities, launcher entry, token method and assets from the
   GBCode app; build both.
 
-**Evidence:** docs commit TBD; standalone APK path/commit TBD.
+**Evidence:** standalone debug APK
+`android/cloudy-x11/app/build/outputs/apk/debug/app-debug.apk` (3.5 MB);
+GBCode debug APK (59 MB) builds with no X11 references; standalone installed as
+`dev.cloudy.x11` and launched in a free-form task (`/tmp/cloudy-x11-standalone.png`).
 
 ## T1 — Standalone app functional (prototype carrier)
 
-- [ ] APK builds with the existing xpra/HTML5 prototype and launches on the
-  Googlebook without GBCode installed/required.
+- [x] APK builds with the existing xpra/HTML5 prototype and launches on the
+  Googlebook; it is independent of GBCode code/packages.
 - [ ] App token/setup card installs the VM prototype; the launcher probe passes
-  after re-running the setup with the standalone app's token.
-- [ ] No `dev.gbcode.app` imports, `GbCodeApp` token, Workbench or Code-OSS
+  after re-running the setup with the standalone app's token. **Pending:** the
+  VM currently holds the previous GBCode token; the standalone launcher reports
+  "Session service not reachable" and offers X11 setup/repair, as expected.
+- [x] No `dev.gbcode.app` imports, `GbCodeApp` token, Workbench or Code-OSS
   dependency in the standalone source.
-- [ ] Launcher/diagnostics/status UI; no per-shell alias dependency for the
-  prototype's own sessions.
-- [ ] Commit with build/launch evidence.
+- [x] Launcher/diagnostics/status UI; the prototype sessions still use the
+  existing setup path.
+- [x] Commit with build/launch evidence.
 
-**Evidence:** build command/result; APK; launch screenshot/log; VM setup log.
+**Evidence:** standalone `assembleDebug` status 0 (3.5 MB); GBCode
+`assembleDebug` status 0 (59 MB, no X11 refs); install/launch `dev.cloudy.x11`
+in free-form task; screenshot `/tmp/cloudy-x11-standalone.png`; launcher logs
+`session watch failed: HTTP 403` because the VM token is still the old one;
+engine smoke X1a in `8666b25`.
 
 ## T2 — VM-wide forwarding (next)
 

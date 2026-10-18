@@ -1,4 +1,4 @@
-package dev.gbcode.app.ui
+package dev.cloudy.x11.ui
 
 import android.app.Activity
 import android.app.ActivityOptions
@@ -15,8 +15,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import dev.gbcode.app.GbCodeApp
-import dev.gbcode.app.R
+import dev.cloudy.x11.CloudyX11App
+import dev.cloudy.x11.R
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -36,7 +36,7 @@ class X11AppsActivity : Activity() {
     private val io = Executors.newSingleThreadExecutor { r ->
         Thread(r, "cloudy-x11-apps").apply { isDaemon = true }
     }
-    private val token: String get() = (application as GbCodeApp).x11Token()
+    private val token: String get() = (application as CloudyX11App).x11Token()
 
     private lateinit var status: TextView
     private lateinit var custom: EditText

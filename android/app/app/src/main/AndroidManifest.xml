@@ -44,30 +44,6 @@
         <activity
             android:name=".ui.UsbInventoryActivity"
             android:exported="true" />
-        <activity
-            android:name=".ui.X11AppsActivity"
-            android:exported="false"
-            android:label="Cloudy X11" />
-        <activity
-            android:name=".ui.X11Activity"
-            android:exported="false"
-            android:launchMode="standard"
-            android:documentLaunchMode="always"
-            android:resizeableActivity="true"
-            android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
-            android:label="Cloudy X11"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density" />
-        <activity-alias
-            android:name=".ui.X11Launcher"
-            android:targetActivity=".ui.X11AppsActivity"
-            android:exported="true"
-            android:label="Cloudy X11"
-            android:icon="@mipmap/ic_launcher_x11">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
         <service
             android:name=".SerialBridgeService"
             android:exported="false"

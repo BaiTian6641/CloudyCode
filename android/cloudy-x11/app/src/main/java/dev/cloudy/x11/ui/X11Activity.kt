@@ -1,4 +1,4 @@
-package dev.gbcode.app.ui
+package dev.cloudy.x11.ui
 
 import android.app.Activity
 import android.app.ActivityManager
@@ -25,8 +25,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.webkit.ProfileStore
 import androidx.webkit.WebViewCompat
-import dev.gbcode.app.GbCodeApp
-import dev.gbcode.app.R
+import dev.cloudy.x11.CloudyX11App
+import dev.cloudy.x11.R
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -101,7 +101,7 @@ class X11Activity : Activity() {
     }
 
     private val token: String
-        get() = (application as GbCodeApp).x11Token()
+        get() = (application as CloudyX11App).x11Token()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -187,7 +187,7 @@ class X11Activity : Activity() {
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
-        if (dev.gbcode.app.BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
+        if (dev.cloudy.x11.BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
     }
 
     private fun applyIsolatedProfile(view: WebView): Boolean = try {

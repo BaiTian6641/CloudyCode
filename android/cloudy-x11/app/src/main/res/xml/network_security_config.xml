@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Development-lane cleartext policy: loopback only.
+  The production route (S02.03/U01.06) terminates authenticated TLS in the
+  app-local gateway; this file exists so the debug build can reach the
+  development sessiond/backend on 127.0.0.1 (adb reverse). The release build
+  must not widen this set. Tracked in docs/evidence/2026-10-16-S02-origin-gateway.md.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

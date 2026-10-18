@@ -142,21 +142,6 @@ class GbCodeApp : Application() {
 
     private val tokenAlias = "gbcode-connection-token"
 
-    /** Per-install token for the X11 proxy (separate from the backend token). */
-    fun x11Token(): String {
-        val p = prefs()
-        p.getString("x11TokenEnc", null)?.let { enc ->
-            return String(dev.gbcode.app.connection.CredentialStore.decrypt(
-                "cloudy-x11-token", bytesOf(enc)), Charsets.UTF_8)
-        }
-        val bytes = ByteArray(24).also { java.security.SecureRandom().nextBytes(it) }
-        val token = hexOf(bytes)
-        p.edit().putString("x11TokenEnc", hexOf(
-            dev.gbcode.app.connection.CredentialStore.encrypt(
-                "cloudy-x11-token", token.toByteArray(Charsets.UTF_8)))).apply()
-        return token
-    }
-
     /**
      * Decrypt the stored backend password; a legacy plaintext value (written
      * before S02.03) is migrated once and removed from disk.

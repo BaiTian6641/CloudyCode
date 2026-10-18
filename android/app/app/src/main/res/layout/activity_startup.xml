@@ -132,12 +132,6 @@
                 android:layout_marginTop="24dp"
                 android:text="@string/startup_offline" />
 
-            <Button
-                android:id="@+id/x11Windows"
-                style="@style/Cloudy.Button.Text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="X11 windows (GUI apps)" />
 
             <Button
                 android:id="@+id/advanced"
